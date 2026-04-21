@@ -1,7 +1,5 @@
 // Extracts text from PDF or DOCX files in the browser.
 import * as pdfjsLib from "pdfjs-dist";
-// Use the bundled worker
-// @ts-expect-error - vite handles this URL import
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth";
 
@@ -17,6 +15,7 @@ export async function extractResumeText(file: File): Promise<string> {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       text += content.items.map((it: any) => ("str" in it ? it.str : "")).join(" ") + "\n";
     }
     return text.trim();
