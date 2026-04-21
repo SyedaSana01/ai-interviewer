@@ -1,1 +1,13 @@
 project_id = "lsdkogyopiglcealotpr"
+
+[functions.process-candidates]
+verify_jwt = true
+
+[functions.send-candidate-email]
+verify_jwt = true
+
+[functions.interview-turn]
+verify_jwt = false
+
+[functions.get-interview-context]
+verify_jwt = false
