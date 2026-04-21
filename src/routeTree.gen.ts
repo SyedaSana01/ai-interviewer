@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InterviewTokenRouteImport } from './routes/interview/$token'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppJobsIndexRouteImport } from './routes/_app/jobs/index'
 import { Route as AppJobsJobIdRouteImport } from './routes/_app/jobs/$jobId'
@@ -28,6 +29,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InterviewTokenRoute = InterviewTokenRouteImport.update({
+  id: '/interview/$token',
+  path: '/interview/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AppDashboardRoute
+  '/interview/$token': typeof InterviewTokenRoute
   '/jobs/$jobId': typeof AppJobsJobIdRoute
   '/jobs/': typeof AppJobsIndexRoute
 }
@@ -57,6 +64,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AppDashboardRoute
+  '/interview/$token': typeof InterviewTokenRoute
   '/jobs/$jobId': typeof AppJobsJobIdRoute
   '/jobs': typeof AppJobsIndexRoute
 }
@@ -66,20 +74,34 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/interview/$token': typeof InterviewTokenRoute
   '/_app/jobs/$jobId': typeof AppJobsJobIdRoute
   '/_app/jobs/': typeof AppJobsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/jobs/$jobId' | '/jobs/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/interview/$token'
+    | '/jobs/$jobId'
+    | '/jobs/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/jobs/$jobId' | '/jobs'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/interview/$token'
+    | '/jobs/$jobId'
+    | '/jobs'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/auth'
     | '/_app/dashboard'
+    | '/interview/$token'
     | '/_app/jobs/$jobId'
     | '/_app/jobs/'
   fileRoutesById: FileRoutesById
@@ -88,6 +110,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  InterviewTokenRoute: typeof InterviewTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -111,6 +134,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/interview/$token': {
+      id: '/interview/$token'
+      path: '/interview/$token'
+      fullPath: '/interview/$token'
+      preLoaderRoute: typeof InterviewTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/dashboard': {
@@ -155,6 +185,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  InterviewTokenRoute: InterviewTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
