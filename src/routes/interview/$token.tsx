@@ -17,7 +17,18 @@ interface Ctx {
   candidateInterviewToken: string | null;
   scheduledAt: string | null;
   durationMinutes: number;
+  interviewType: string;
+  difficulty: string;
   alreadyCompleted: boolean;
+}
+
+const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
+const DIFF_LABEL: Record<string, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+function fmtTime(sec: number) {
+  const m = Math.max(0, Math.floor(sec / 60));
+  const s = Math.max(0, sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -36,6 +47,7 @@ function InterviewPage() {
   const [answer, setAnswer] = useState("");
   const [thinking, setThinking] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
