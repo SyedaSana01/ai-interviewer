@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     // Try invite token first
     const { data: invite } = await admin
       .from("interview_invites")
-      .select("*, candidates(id, name, status, interview_token, jobs(title))")
+      .select("*, candidates(id, name, status, interview_token, jobs(title, interview_duration, interview_type, difficulty))")
       .eq("token", token)
       .maybeSingle();
 
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       // Legacy: candidate.interview_token
       const { data: cand } = await admin
         .from("candidates")
-        .select("id, name, status, interview_token, jobs(title)")
+        .select("id, name, status, interview_token, jobs(title, interview_duration, interview_type, difficulty)")
         .eq("interview_token", token)
         .maybeSingle();
       candidate = cand;
@@ -50,14 +50,17 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    const job = (candidate as any).jobs ?? {};
     return j({
       candidateId: candidate.id,
       candidateName: candidate.name,
-      jobTitle: (candidate as any).jobs?.title ?? "the position",
+      jobTitle: job.title ?? "the position",
+      interviewType: job.interview_type ?? "mixed",
+      difficulty: job.difficulty ?? "medium",
       candidateStatus: candidate.status,
       candidateInterviewToken: candidate.interview_token,
       scheduledAt: inviteRow?.scheduled_at ?? null,
-      durationMinutes: inviteRow?.duration_minutes ?? 20,
+      durationMinutes: inviteRow?.duration_minutes ?? job.interview_duration ?? 20,
       alreadyCompleted: existingInterview?.status === "completed",
     });
   } catch (e) {

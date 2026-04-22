@@ -276,7 +276,10 @@ export type Database = {
         Row: {
           created_at: string
           description: string
+          difficulty: string
           id: string
+          interview_duration: number
+          interview_type: string
           recruiter_id: string
           role_type: string | null
           title: string
@@ -285,7 +288,10 @@ export type Database = {
         Insert: {
           created_at?: string
           description: string
+          difficulty?: string
           id?: string
+          interview_duration?: number
+          interview_type?: string
           recruiter_id: string
           role_type?: string | null
           title: string
@@ -294,7 +300,10 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string
+          difficulty?: string
           id?: string
+          interview_duration?: number
+          interview_type?: string
           recruiter_id?: string
           role_type?: string | null
           title?: string

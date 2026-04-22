@@ -10,7 +10,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_QUESTIONS = 6;
+function questionsForDuration(min: number) {
+  if (min <= 15) return 4;
+  if (min <= 30) return 6;
+  if (min <= 45) return 8;
+  return 10;
+}
+function difficultyGuidance(d?: string) {
+  if (d === "easy") return "Keep questions BASIC and foundational. Focus on core concepts and simple definitions.";
+  if (d === "hard") return "Ask DEEP technical / analytical questions. Push for trade-offs, edge cases, and architectural reasoning.";
+  return "Use SCENARIO-BASED questions of moderate complexity. Mix concepts with applied judgement.";
+}
+function typeGuidance(t?: string) {
+  if (t === "technical") return "All questions must be ROLE-SPECIFIC TECHNICAL questions only. No HR/behavioural questions.";
+  if (t === "hr") return "Focus on BEHAVIOURAL, motivation, culture-fit and soft-skill questions. Avoid deep technical drilling.";
+  return "Mix BEHAVIOURAL, ROLE-SPECIFIC TECHNICAL, and motivation questions in roughly equal parts.";
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -87,7 +102,8 @@ Deno.serve(async (req) => {
 
     // Decide: end the interview?
     const job = (cand as any).jobs;
-    if (action === "end" || assistantTurns >= MAX_QUESTIONS) {
+    const maxQuestions = questionsForDuration(job?.interview_duration ?? 20);
+    if (action === "end" || assistantTurns >= maxQuestions) {
       await analyzeAndComplete(admin, lovableKey, interview.id, cand, job, messages ?? []);
       return json({ finished: true, interviewId: interview.id });
     }
@@ -98,11 +114,15 @@ Job description: ${job.description.slice(0, 1500)}
 Candidate background: ${cand.experience_summary ?? "N/A"}
 Skills: ${(cand.skills ?? []).join(", ")}
 
+Interview configuration:
+- Type: ${job.interview_type ?? "mixed"} — ${typeGuidance(job.interview_type)}
+- Difficulty: ${job.difficulty ?? "medium"} — ${difficultyGuidance(job.difficulty)}
+- Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)
+
 Rules:
 - Ask ONE concise question per turn (max 2 sentences).
-- Mix behavioral, role-specific technical, and motivation questions.
 - Build on previous answers when relevant.
-- Question ${assistantTurns + 1} of ${MAX_QUESTIONS}.
+- Question ${assistantTurns + 1} of ${maxQuestions}.
 - ${assistantTurns === 0 ? "Start with a warm greeting and your first question." : "Do not greet again, just ask the next question."}
 - Output only the question text, no preamble.`;
 
@@ -137,7 +157,7 @@ Rules:
     return json({
       question,
       questionNumber: assistantTurns + 1,
-      totalQuestions: MAX_QUESTIONS,
+      totalQuestions: maxQuestions,
       interviewId: interview.id,
     });
   } catch (e) {

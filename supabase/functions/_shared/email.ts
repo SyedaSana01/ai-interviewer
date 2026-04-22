@@ -7,8 +7,11 @@ export const FROM_ADDRESS = "HireFlow <onboarding@resend.dev>";
 export function inviteHtml(opts: {
   name: string; jobTitle: string; interviewUrl: string;
   scheduledAt: string; durationMinutes: number; originalEmail: string;
+  interviewType?: string; difficulty?: string;
 }) {
   const start = new Date(opts.scheduledAt).toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+  const typeLabel = ({ technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed (technical + HR)" } as Record<string, string>)[opts.interviewType ?? "mixed"] ?? "Mixed";
+  const diffLabel = ({ easy: "Easy", medium: "Medium", hard: "Hard" } as Record<string, string>)[opts.difficulty ?? "medium"] ?? "Medium";
   return `
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:0;color:#0f172a;background:#ffffff">
     <div style="background:#fef3c7;padding:10px 16px;font-size:12px;border-radius:0 0 8px 8px;text-align:center">
@@ -26,6 +29,8 @@ export function inviteHtml(opts: {
       <table style="width:100%;border-collapse:collapse;margin:20px 0;background:#f8fafc;border-radius:10px">
         <tr><td style="padding:12px 16px;font-size:13px;color:#64748b">📅 Start time</td><td style="padding:12px 16px;font-size:14px;text-align:right;font-weight:500">${start}</td></tr>
         <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0">⏱ Duration</td><td style="padding:12px 16px;font-size:14px;text-align:right;font-weight:500;border-top:1px solid #e2e8f0">~${opts.durationMinutes} minutes</td></tr>
+        <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0">🎯 Type</td><td style="padding:12px 16px;font-size:14px;text-align:right;font-weight:500;border-top:1px solid #e2e8f0">${typeLabel}</td></tr>
+        <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0">📊 Difficulty</td><td style="padding:12px 16px;font-size:14px;text-align:right;font-weight:500;border-top:1px solid #e2e8f0">${diffLabel}</td></tr>
       </table>
 
       <div style="text-align:center;margin:28px 0">

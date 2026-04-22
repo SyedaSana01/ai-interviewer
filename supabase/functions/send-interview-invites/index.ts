@@ -45,6 +45,10 @@ Deno.serve(async (req) => {
       return json({ ok: true, count: 0, note: "No shortlisted candidates to invite." });
     }
 
+    const jobDuration = (job as any).interview_duration ?? 20;
+    const jobType = (job as any).interview_type ?? "mixed";
+    const jobDifficulty = (job as any).difficulty ?? "medium";
+
     let sent = 0;
     let failed = 0;
     for (const c of candidates) {
@@ -54,6 +58,7 @@ Deno.serve(async (req) => {
           job_id: jobId,
           recruiter_id: userData.user.id,
           email_sent_to: TEST_RECIPIENT,
+          duration_minutes: jobDuration,
         }).select().single();
         if (ie || !invite) { failed++; continue; }
 
@@ -65,6 +70,8 @@ Deno.serve(async (req) => {
           scheduledAt: invite.scheduled_at,
           durationMinutes: invite.duration_minutes,
           originalEmail: c.email,
+          interviewType: jobType,
+          difficulty: jobDifficulty,
         });
 
         const result = await sendViaResend({

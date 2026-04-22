@@ -17,7 +17,18 @@ interface Ctx {
   candidateInterviewToken: string | null;
   scheduledAt: string | null;
   durationMinutes: number;
+  interviewType: string;
+  difficulty: string;
   alreadyCompleted: boolean;
+}
+
+const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
+const DIFF_LABEL: Record<string, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+function fmtTime(sec: number) {
+  const m = Math.max(0, Math.floor(sec / 60));
+  const s = Math.max(0, sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -36,6 +47,7 @@ function InterviewPage() {
   const [answer, setAnswer] = useState("");
   const [thinking, setThinking] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
@@ -196,6 +208,7 @@ function InterviewPage() {
     setStarted(true);
     setThinking(true);
     startRecording();
+    if (ctx) setSecondsLeft(ctx.durationMinutes * 60);
     const { data, error } = await supabase.functions.invoke("interview-turn", { body: { token, action: "start" } });
     setThinking(false);
     if (error || data?.error) { toast.error(data?.error || "Failed to start"); return; }
@@ -229,11 +242,23 @@ function InterviewPage() {
     setFinished(true);
   };
 
-  const endInterview = async () => {
+  const endInterview = useCallback(async () => {
     setThinking(true);
     await supabase.functions.invoke("interview-turn", { body: { token, action: "end" } });
     await finishInterview();
-  };
+  }, [token]);
+
+  // ---- Countdown timer
+  useEffect(() => {
+    if (!started || finished || secondsLeft === null) return;
+    if (secondsLeft <= 0) {
+      toast.info("Time is up — submitting your interview.");
+      endInterview();
+      return;
+    }
+    const t = setTimeout(() => setSecondsLeft((s) => (s === null ? null : s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [started, finished, secondsLeft, endInterview]);
 
   const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -313,6 +338,7 @@ function InterviewPage() {
             submitAnswer={submitAnswer}
             endInterview={endInterview}
             supportsSpeech={!!supportsSpeech}
+            secondsLeft={secondsLeft}
           />
         )}
       </div>
@@ -333,6 +359,8 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
         <div className="mt-6 space-y-2 text-sm text-white/80">
           <div>📅 <strong>Start:</strong> {start}</div>
           <div>⏱ <strong>Duration:</strong> ~{ctx.durationMinutes} min ({totalQuestions} questions)</div>
+          <div>🎯 <strong>Type:</strong> {TYPE_LABEL[ctx.interviewType] ?? "Mixed"}</div>
+          <div>📊 <strong>Difficulty:</strong> {DIFF_LABEL[ctx.difficulty] ?? "Medium"}</div>
         </div>
 
         <div className="mt-6 rounded-xl bg-white/5 backdrop-blur border border-white/20 p-5 text-sm text-white/85 space-y-2">
@@ -388,9 +416,11 @@ function InterviewActive(props: {
   submitAnswer: () => void;
   endInterview: () => void;
   supportsSpeech: boolean;
+  secondsLeft: number | null;
 }) {
   const { videoRef, warning, question, questionNumber, totalQuestions, thinking, answer, setAnswer,
-    listening, startListening, stopListening, submitAnswer, endInterview, supportsSpeech } = props;
+    listening, startListening, stopListening, submitAnswer, endInterview, supportsSpeech, secondsLeft } = props;
+  const lowTime = secondsLeft !== null && secondsLeft <= 60;
   return (
     <div className="flex-1 grid md:grid-cols-[1fr_240px] gap-6">
       <div className="flex flex-col">
@@ -400,8 +430,15 @@ function InterviewActive(props: {
             <span>{warning}</span>
           </div>
         )}
-        <div className="text-xs uppercase tracking-wider text-white/60 mb-3">
-          Question {questionNumber} of {totalQuestions}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs uppercase tracking-wider text-white/60">
+            Question {questionNumber} of {totalQuestions}
+          </div>
+          {secondsLeft !== null && (
+            <div className={`text-sm font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
+              ⏱ {fmtTime(secondsLeft)}
+            </div>
+          )}
         </div>
         <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-6 mb-4 min-h-[120px]">
           {thinking && !question ? (
