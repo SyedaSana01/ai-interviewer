@@ -359,6 +359,8 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
         <div className="mt-6 space-y-2 text-sm text-white/80">
           <div>📅 <strong>Start:</strong> {start}</div>
           <div>⏱ <strong>Duration:</strong> ~{ctx.durationMinutes} min ({totalQuestions} questions)</div>
+          <div>🎯 <strong>Type:</strong> {TYPE_LABEL[ctx.interviewType] ?? "Mixed"}</div>
+          <div>📊 <strong>Difficulty:</strong> {DIFF_LABEL[ctx.difficulty] ?? "Medium"}</div>
         </div>
 
         <div className="mt-6 rounded-xl bg-white/5 backdrop-blur border border-white/20 p-5 text-sm text-white/85 space-y-2">
