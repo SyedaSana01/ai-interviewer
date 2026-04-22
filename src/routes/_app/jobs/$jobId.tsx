@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractResumeText } from "@/lib/resumeParser";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye } from "lucide-react";
+import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info } from "lucide-react";
 import { CandidateDrawer } from "@/components/CandidateDrawer";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -102,8 +102,24 @@ function JobDetail() {
       body: { candidateId, kind: "interview_invite", appUrl: window.location.origin },
     });
     if (error) { toast.error(error.message); return; }
-    if (data?.simulated) toast.warning("Email simulated (configure email domain in Cloud → Emails to send for real). Status updated.");
-    else toast.success("Invite sent");
+    if (data?.sent) toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
+    else toast.warning(data?.note || "Invite simulated. Status updated.");
+    load();
+  };
+
+  const [bulkSending, setBulkSending] = useState(false);
+  const sendBulkInvites = async () => {
+    const shortlistedCount = candidates.filter((c) => c.status === "shortlisted").length;
+    if (shortlistedCount === 0) { toast.error("No shortlisted candidates to invite."); return; }
+    setBulkSending(true);
+    toast.info(`Sending ${shortlistedCount} invite(s)…`);
+    const { data, error } = await supabase.functions.invoke("send-interview-invites", {
+      body: { jobId, appUrl: window.location.origin },
+    });
+    setBulkSending(false);
+    if (error) { toast.error(error.message); return; }
+    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites (TEST MODE → ${data.testRecipient})`);
+    else toast.warning(data?.note || "Invites processed.");
     load();
   };
 
@@ -137,10 +153,23 @@ function JobDetail() {
         </label>
       </div>
 
-      <details className="mt-4 mb-8 text-sm text-muted-foreground">
+      <details className="mt-4 mb-4 text-sm text-muted-foreground">
         <summary className="cursor-pointer">View job description</summary>
         <p className="mt-2 whitespace-pre-wrap">{job.description}</p>
       </details>
+
+      <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+        <div className="flex items-start gap-2 text-sm">
+          <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
+          <span className="text-amber-900 dark:text-amber-200">
+            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>, regardless of the candidate's address.
+          </span>
+        </div>
+        <Button size="sm" onClick={sendBulkInvites} disabled={bulkSending} className="shrink-0">
+          {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+          Send Interview Invites
+        </Button>
+      </div>
 
       <div className="flex gap-1 mb-4 border-b">
         {FILTERS.map((f) => {
