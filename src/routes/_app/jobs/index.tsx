@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Briefcase } from "lucide-react";
 
 export const Route = createFileRoute("/_app/jobs/")({
@@ -21,6 +22,9 @@ function JobsList() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [roleType, setRoleType] = useState("");
+  const [duration, setDuration] = useState("30");
+  const [interviewType, setInterviewType] = useState("mixed");
+  const [difficulty, setDifficulty] = useState("medium");
   const [creating, setCreating] = useState(false);
 
   const load = async () => {
@@ -40,13 +44,22 @@ function JobsList() {
       if (!u.user) throw new Error("Not signed in");
       const { data, error } = await supabase
         .from("jobs")
-        .insert({ title, description, role_type: roleType || null, recruiter_id: u.user.id })
+        .insert({
+          title,
+          description,
+          role_type: roleType || null,
+          recruiter_id: u.user.id,
+          interview_duration: parseInt(duration, 10),
+          interview_type: interviewType,
+          difficulty,
+        })
         .select()
         .single();
       if (error) throw error;
       toast.success("Job created");
       setOpen(false);
       setTitle(""); setDescription(""); setRoleType("");
+      setDuration("30"); setInterviewType("mixed"); setDifficulty("medium");
       navigate({ to: "/jobs/$jobId", params: { jobId: data.id } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
@@ -81,10 +94,48 @@ function JobsList() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   required
-                  rows={8}
+                  rows={6}
                   placeholder="Describe the role, requirements, and ideal candidate..."
                 />
               </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Duration</Label>
+                  <Select value={duration} onValueChange={setDuration}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 min</SelectItem>
+                      <SelectItem value="30">30 min</SelectItem>
+                      <SelectItem value="45">45 min</SelectItem>
+                      <SelectItem value="60">60 min</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <Select value={interviewType} onValueChange={setInterviewType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="technical">Technical</SelectItem>
+                      <SelectItem value="hr">HR</SelectItem>
+                      <SelectItem value="mixed">Mixed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Difficulty</Label>
+                  <Select value={difficulty} onValueChange={setDifficulty}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <Button type="submit" disabled={creating} className="w-full">
                 {creating ? "Creating…" : "Create job"}
               </Button>
