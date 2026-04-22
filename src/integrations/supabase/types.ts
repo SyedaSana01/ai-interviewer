@@ -76,6 +76,63 @@ export type Database = {
           },
         ]
       }
+      interview_invites: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          duration_minutes: number
+          email_sent_to: string | null
+          expires_at: string
+          id: string
+          job_id: string
+          recruiter_id: string
+          scheduled_at: string
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          duration_minutes?: number
+          email_sent_to?: string | null
+          expires_at?: string
+          id?: string
+          job_id: string
+          recruiter_id: string
+          scheduled_at?: string
+          token?: string
+          used_at?: string | null
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          duration_minutes?: number
+          email_sent_to?: string | null
+          expires_at?: string
+          id?: string
+          job_id?: string
+          recruiter_id?: string
+          scheduled_at?: string
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_invites_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_invites_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interview_messages: {
         Row: {
           content: string
@@ -108,15 +165,62 @@ export type Database = {
           },
         ]
       }
+      interview_violations: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          detail: string | null
+          id: string
+          interview_id: string
+          kind: string
+          recruiter_id: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          interview_id: string
+          kind: string
+          recruiter_id: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          interview_id?: string
+          kind?: string
+          recruiter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_violations_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_violations_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: false
+            referencedRelation: "interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interviews: {
         Row: {
           candidate_id: string
           communication_score: number | null
           completed_at: string | null
+          hire_decision: string | null
           id: string
           overall_score: number | null
           recommendation: string | null
           recommendation_reasoning: string | null
+          recording_url: string | null
           recruiter_id: string
           started_at: string
           status: string
@@ -128,10 +232,12 @@ export type Database = {
           candidate_id: string
           communication_score?: number | null
           completed_at?: string | null
+          hire_decision?: string | null
           id?: string
           overall_score?: number | null
           recommendation?: string | null
           recommendation_reasoning?: string | null
+          recording_url?: string | null
           recruiter_id: string
           started_at?: string
           status?: string
@@ -143,10 +249,12 @@ export type Database = {
           candidate_id?: string
           communication_score?: number | null
           completed_at?: string | null
+          hire_decision?: string | null
           id?: string
           overall_score?: number | null
           recommendation?: string | null
           recommendation_reasoning?: string | null
+          recording_url?: string | null
           recruiter_id?: string
           started_at?: string
           status?: string
