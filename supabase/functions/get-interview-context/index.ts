@@ -1,5 +1,5 @@
-// Public endpoint: candidate fetches sanitized interview context by token.
-// Returns only candidate name + job title, not recruiter notes / scores.
+// Public endpoint: candidate fetches sanitized interview context by invite token.
+// Accepts either an interview_invites.token (new) or candidates.interview_token (legacy).
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -14,25 +14,50 @@ Deno.serve(async (req) => {
     const { token } = await req.json();
     if (!token) return j({ error: "Missing token" }, 400);
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data } = await admin
-      .from("candidates")
-      .select("id, name, status, jobs(title)")
-      .eq("interview_token", token)
-      .single();
-    if (!data) return j({ error: "Invalid link" }, 404);
+
+    // Try invite token first
+    const { data: invite } = await admin
+      .from("interview_invites")
+      .select("*, candidates(id, name, status, interview_token, jobs(title))")
+      .eq("token", token)
+      .maybeSingle();
+
+    let candidate: any = null;
+    let inviteRow: any = null;
+    if (invite) {
+      if (new Date(invite.expires_at).getTime() < Date.now()) {
+        return j({ error: "This interview link has expired." }, 410);
+      }
+      candidate = (invite as any).candidates;
+      inviteRow = invite;
+    } else {
+      // Legacy: candidate.interview_token
+      const { data: cand } = await admin
+        .from("candidates")
+        .select("id, name, status, interview_token, jobs(title)")
+        .eq("interview_token", token)
+        .maybeSingle();
+      candidate = cand;
+    }
+
+    if (!candidate) return j({ error: "Invalid link" }, 404);
 
     const { data: existingInterview } = await admin
       .from("interviews")
       .select("id, status")
-      .eq("candidate_id", data.id)
+      .eq("candidate_id", candidate.id)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     return j({
-      candidateName: data.name,
-      jobTitle: (data as any).jobs?.title ?? "the position",
-      candidateStatus: data.status,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      jobTitle: (candidate as any).jobs?.title ?? "the position",
+      candidateStatus: candidate.status,
+      candidateInterviewToken: candidate.interview_token,
+      scheduledAt: inviteRow?.scheduled_at ?? null,
+      durationMinutes: inviteRow?.duration_minutes ?? 20,
       alreadyCompleted: existingInterview?.status === "completed",
     });
   } catch (e) {
