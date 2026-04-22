@@ -416,9 +416,11 @@ function InterviewActive(props: {
   submitAnswer: () => void;
   endInterview: () => void;
   supportsSpeech: boolean;
+  secondsLeft: number | null;
 }) {
   const { videoRef, warning, question, questionNumber, totalQuestions, thinking, answer, setAnswer,
-    listening, startListening, stopListening, submitAnswer, endInterview, supportsSpeech } = props;
+    listening, startListening, stopListening, submitAnswer, endInterview, supportsSpeech, secondsLeft } = props;
+  const lowTime = secondsLeft !== null && secondsLeft <= 60;
   return (
     <div className="flex-1 grid md:grid-cols-[1fr_240px] gap-6">
       <div className="flex flex-col">
@@ -428,8 +430,15 @@ function InterviewActive(props: {
             <span>{warning}</span>
           </div>
         )}
-        <div className="text-xs uppercase tracking-wider text-white/60 mb-3">
-          Question {questionNumber} of {totalQuestions}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs uppercase tracking-wider text-white/60">
+            Question {questionNumber} of {totalQuestions}
+          </div>
+          {secondsLeft !== null && (
+            <div className={`text-sm font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
+              ⏱ {fmtTime(secondsLeft)}
+            </div>
+          )}
         </div>
         <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-6 mb-4 min-h-[120px]">
           {thinking && !question ? (
