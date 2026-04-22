@@ -208,6 +208,7 @@ function InterviewPage() {
     setStarted(true);
     setThinking(true);
     startRecording();
+    if (ctx) setSecondsLeft(ctx.durationMinutes * 60);
     const { data, error } = await supabase.functions.invoke("interview-turn", { body: { token, action: "start" } });
     setThinking(false);
     if (error || data?.error) { toast.error(data?.error || "Failed to start"); return; }
@@ -241,11 +242,23 @@ function InterviewPage() {
     setFinished(true);
   };
 
-  const endInterview = async () => {
+  const endInterview = useCallback(async () => {
     setThinking(true);
     await supabase.functions.invoke("interview-turn", { body: { token, action: "end" } });
     await finishInterview();
-  };
+  }, [token]);
+
+  // ---- Countdown timer
+  useEffect(() => {
+    if (!started || finished || secondsLeft === null) return;
+    if (secondsLeft <= 0) {
+      toast.info("Time is up — submitting your interview.");
+      endInterview();
+      return;
+    }
+    const t = setTimeout(() => setSecondsLeft((s) => (s === null ? null : s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [started, finished, secondsLeft, endInterview]);
 
   const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
