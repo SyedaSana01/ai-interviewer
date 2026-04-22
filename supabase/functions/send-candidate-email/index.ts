@@ -2,15 +2,12 @@
 // Uses Resend in TEST MODE — all emails are forced to TEST_RECIPIENT.
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { inviteHtml, sendViaResend, TEST_RECIPIENT } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// TEST MODE — emails always go here. Replace with verified domain logic later.
-const TEST_RECIPIENT = "syedasuhasana0504@gmail.com";
-const FROM_ADDRESS = "HireFlow <onboarding@resend.dev>";
 
 type EmailKind = "interview_invite" | "selected" | "rejected";
 
