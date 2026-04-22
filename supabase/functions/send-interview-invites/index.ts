@@ -2,7 +2,7 @@
 // In TEST MODE all emails are routed to TEST_RECIPIENT.
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { inviteHtml, sendViaResend } from "../send-candidate-email/index.ts";
+import { inviteHtml, sendViaResend, TEST_RECIPIENT } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
