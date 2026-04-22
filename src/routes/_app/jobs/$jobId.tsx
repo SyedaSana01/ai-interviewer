@@ -153,10 +153,22 @@ function JobDetail() {
         </label>
       </div>
 
-      <details className="mt-4 mb-4 text-sm text-muted-foreground">
+      <details className="mt-4 mb-2 text-sm text-muted-foreground">
         <summary className="cursor-pointer">View job description</summary>
         <p className="mt-2 whitespace-pre-wrap">{job.description}</p>
       </details>
+
+      <div className="flex flex-wrap gap-2 mb-4 text-xs">
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-medium">
+          ⏱ {(job as any).interview_duration ?? 20} min
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-medium capitalize">
+          🎯 {(job as any).interview_type ?? "mixed"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-medium capitalize">
+          📊 {(job as any).difficulty ?? "medium"}
+        </span>
+      </div>
 
       <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
         <div className="flex items-start gap-2 text-sm">
