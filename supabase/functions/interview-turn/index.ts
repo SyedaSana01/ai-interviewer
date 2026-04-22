@@ -24,11 +24,23 @@ Deno.serve(async (req) => {
     const { token, action, answer } = await req.json();
     if (!token || !action) return json({ error: "Missing fields" }, 400);
 
-    const { data: cand } = await admin
-      .from("candidates")
-      .select("*, jobs(title, description)")
-      .eq("interview_token", token)
-      .single();
+    // Resolve candidate from invite token first, then legacy candidate token
+    let cand: any = null;
+    const { data: invite } = await admin
+      .from("interview_invites")
+      .select("candidate_id, expires_at, used_at")
+      .eq("token", token)
+      .maybeSingle();
+    if (invite) {
+      if (new Date(invite.expires_at).getTime() < Date.now()) {
+        return json({ error: "Interview link expired" }, 410);
+      }
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("id", invite.candidate_id).single();
+      cand = c;
+    } else {
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("interview_token", token).maybeSingle();
+      cand = c;
+    }
     if (!cand) return json({ error: "Invalid interview link" }, 404);
     if (cand.status === "selected" || cand.status === "final_rejected") {
       return json({ error: "Interview no longer available" }, 403);
@@ -176,6 +188,7 @@ async function analyzeAndComplete(
                 strengths: { type: "string" },
                 weaknesses: { type: "string" },
                 recommendation: { type: "string", enum: ["suitable", "not_suitable"] },
+                hire_decision: { type: "string", enum: ["hire", "maybe", "no_hire"] },
                 recommendation_reasoning: { type: "string" },
               },
               required: [
@@ -185,6 +198,7 @@ async function analyzeAndComplete(
                 "strengths",
                 "weaknesses",
                 "recommendation",
+                "hire_decision",
                 "recommendation_reasoning",
               ],
               additionalProperties: false,
@@ -202,6 +216,7 @@ async function analyzeAndComplete(
     strengths: "Analysis unavailable.",
     weaknesses: "Analysis unavailable.",
     recommendation: "not_suitable",
+    hire_decision: "no_hire",
     recommendation_reasoning: "Could not generate analysis.",
   };
   if (aiRes.ok) {

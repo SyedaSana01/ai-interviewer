@@ -6,8 +6,17 @@ verify_jwt = false
 [functions.send-candidate-email]
 verify_jwt = false
 
+[functions.send-interview-invites]
+verify_jwt = false
+
 [functions.interview-turn]
 verify_jwt = false
 
 [functions.get-interview-context]
+verify_jwt = false
+
+[functions.log-violation]
+verify_jwt = false
+
+[functions.upload-recording]
 verify_jwt = false
