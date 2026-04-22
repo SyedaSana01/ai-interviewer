@@ -338,6 +338,7 @@ function InterviewPage() {
             submitAnswer={submitAnswer}
             endInterview={endInterview}
             supportsSpeech={!!supportsSpeech}
+            secondsLeft={secondsLeft}
           />
         )}
       </div>
