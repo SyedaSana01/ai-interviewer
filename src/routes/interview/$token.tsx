@@ -503,25 +503,36 @@ function InterviewActive(props: {
       )}
 
       <div className="grid md:grid-cols-[1.1fr_1fr] gap-4 flex-1 min-h-0">
-        {/* AI Avatar Stage */}
-        <div className="rounded-2xl bg-gradient-to-br from-white/10 to-white/0 backdrop-blur border border-white/20 p-6 flex flex-col items-center justify-center min-h-[360px] relative overflow-hidden">
-          <div className="absolute top-3 left-3 text-xs uppercase tracking-wider text-white/60">
+        {/* AI Avatar Stage — realistic human interviewer "video tile" */}
+        <div className="rounded-2xl bg-black/40 backdrop-blur border border-white/20 flex flex-col min-h-[360px] relative overflow-hidden">
+          <div className="absolute top-3 left-3 z-20 text-[10px] font-bold uppercase tracking-wider bg-black/50 text-white/90 px-2 py-1 rounded">
             Question {questionNumber} of {totalQuestions}
           </div>
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-black/50 text-white/90 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
+            <Wifi className="w-3 h-3 text-success" /> Live
+          </div>
+
           <Avatar speaking={aiSpeaking} />
-          <div className="mt-2 text-sm text-white/70 font-medium">AI Interviewer</div>
-          <div className="mt-5 max-w-md text-center min-h-[80px] flex items-center justify-center">
-            {thinking && !question ? (
-              <div className="flex items-center gap-2 text-white/70"><Loader2 className="w-4 h-4 animate-spin" /> Thinking…</div>
-            ) : (
-              <p className="text-base md:text-lg leading-relaxed">{question}</p>
+
+          {/* Caption overlay */}
+          <div className="absolute bottom-0 left-0 right-0 z-20 p-4 bg-gradient-to-t from-black/80 via-black/50 to-transparent">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-1 flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${aiSpeaking ? "bg-accent animate-pulse" : "bg-white/40"}`} />
+              Sarah · AI Interviewer
+            </div>
+            <div className="min-h-[48px] flex items-center">
+              {thinking && !question ? (
+                <div className="flex items-center gap-2 text-white/80 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Thinking…</div>
+              ) : (
+                <p className="text-sm md:text-base text-white leading-snug">{question}</p>
+              )}
+            </div>
+            {question && (
+              <button onClick={replayQuestion} className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/70 hover:text-white">
+                <Volume2 className="w-3 h-3" /> Replay
+              </button>
             )}
           </div>
-          {question && (
-            <Button size="sm" variant="ghost" className="mt-3 text-white/70 hover:text-white hover:bg-white/10" onClick={replayQuestion}>
-              <Volume2 className="w-3.5 h-3.5 mr-1.5" /> Replay
-            </Button>
-          )}
         </div>
 
         {/* Live Transcript Panel */}
