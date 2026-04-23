@@ -3,7 +3,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Toaster, toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Sparkles, CheckCircle2, Loader2, Camera, ShieldAlert, Video } from "lucide-react";
+import {
+  Mic, MicOff, Sparkles, CheckCircle2, Loader2, Camera, ShieldAlert,
+  Video, Send, RotateCcw, Volume2, CameraOff, Bot,
+} from "lucide-react";
 
 export const Route = createFileRoute("/interview/$token")({
   component: InterviewPage,
@@ -48,6 +51,9 @@ function InterviewPage() {
   const [thinking, setThinking] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [micActive, setMicActive] = useState(false);
+  const [camActive, setCamActive] = useState(false);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
@@ -56,6 +62,7 @@ function InterviewPage() {
 
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const lastSpeechAtRef = useRef<number>(Date.now());
@@ -74,14 +81,24 @@ function InterviewPage() {
     })();
   }, [token]);
 
-  // ---- Speak question
+  // ---- Speak question (with humanizer + speaking state)
   useEffect(() => {
-    if (question && typeof window !== "undefined" && "speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance(question);
-      u.rate = 1.0;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    }
+    if (!question || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const text = humanize(question);
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.98;
+    u.pitch = 1.0;
+    // Prefer a natural English voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => /en-(US|GB)/i.test(v.lang) && /Google|Natural|Samantha|Jenny|Aria/i.test(v.name))
+      ?? voices.find(v => /en/i.test(v.lang));
+    if (preferred) u.voice = preferred;
+    u.onstart = () => setAiSpeaking(true);
+    u.onend = () => setAiSpeaking(false);
+    u.onerror = () => setAiSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    return () => { window.speechSynthesis.cancel(); setAiSpeaking(false); };
   }, [question]);
 
   const showWarning = useCallback((msg: string) => {
@@ -97,23 +114,39 @@ function InterviewPage() {
   }, [token]);
 
   // ---- Request camera + mic
+  const attachStream = (s: MediaStream) => {
+    streamRef.current = s;
+    [videoRef.current, previewVideoRef.current].forEach((el) => {
+      if (el) {
+        el.srcObject = s;
+        el.play().catch(() => {});
+      }
+    });
+    setCamActive(s.getVideoTracks().some(t => t.enabled && t.readyState === "live"));
+    setMicActive(s.getAudioTracks().some(t => t.enabled && t.readyState === "live"));
+  };
+
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
         audio: true,
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
+      attachStream(stream);
       setPermsGranted(true);
     } catch (e) {
       toast.error("Camera & microphone access is required for this interview.");
       console.error(e);
     }
   };
+
+  // Re-attach stream to floating preview when interview becomes active
+  useEffect(() => {
+    if (started && streamRef.current && previewVideoRef.current) {
+      previewVideoRef.current.srcObject = streamRef.current;
+      previewVideoRef.current.play().catch(() => {});
+    }
+  }, [started]);
 
   // ---- Tab/visibility, blur, camera-off, silence detection
   useEffect(() => {
@@ -132,10 +165,15 @@ function InterviewPage() {
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
 
-    // camera-off detection
+    // camera-off detection + status indicator
     const cameraInterval = setInterval(() => {
-      const track = streamRef.current?.getVideoTracks()?.[0];
-      if (!track || track.readyState !== "live" || track.muted || !track.enabled) {
+      const vTrack = streamRef.current?.getVideoTracks()?.[0];
+      const aTrack = streamRef.current?.getAudioTracks()?.[0];
+      const camOk = !!vTrack && vTrack.readyState === "live" && !vTrack.muted && vTrack.enabled;
+      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled;
+      setCamActive(camOk);
+      setMicActive(micOk);
+      if (!camOk) {
         showWarning("⚠️ Camera is off — please enable it to continue.");
         logViolation("camera_off");
       }
@@ -267,7 +305,7 @@ function InterviewPage() {
     r.lang = "en-US";
     r.continuous = true;
     r.interimResults = true;
-    let finalText = "";
+    let finalText = answer ? answer + " " : "";
     r.onresult = (e: any) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -286,8 +324,23 @@ function InterviewPage() {
   };
   const stopListening = () => { recogRef.current?.stop(); setListening(false); };
 
+  const retryAnswer = () => {
+    stopListening();
+    setAnswer("");
+    setTimeout(() => startListening(), 150);
+  };
+
+  const replayQuestion = () => {
+    if (!question || typeof window === "undefined") return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(humanize(question));
+    u.onstart = () => setAiSpeaking(true);
+    u.onend = () => setAiSpeaking(false);
+    window.speechSynthesis.speak(u);
+  };
+
   // ---- Cleanup
-  useEffect(() => () => { cleanupStream(); }, []);
+  useEffect(() => () => { cleanupStream(); window.speechSynthesis?.cancel(); }, []);
 
   if (loading) return <Loading text="Loading interview…" />;
   if (!ctx) return <CenteredCard title="Invalid interview link" body="This link may have expired or never existed." />;
@@ -303,12 +356,17 @@ function InterviewPage() {
   return (
     <div className="min-h-screen bg-[image:var(--gradient-hero)] text-primary-foreground">
       <Toaster richColors position="top-right" />
-      <div className="max-w-4xl mx-auto p-6 md:p-10 min-h-screen flex flex-col">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-[image:var(--gradient-accent)] flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-accent-foreground" />
+      <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-screen flex flex-col">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[image:var(--gradient-accent)] flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-accent-foreground" />
+            </div>
+            <span className="font-semibold">HireFlow</span>
           </div>
-          <span className="font-semibold">HireFlow</span>
+          {started && (
+            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} />
+          )}
         </div>
 
         {!started ? (
@@ -324,7 +382,7 @@ function InterviewPage() {
         ) : (
           <InterviewActive
             ctx={ctx}
-            videoRef={videoRef}
+            previewVideoRef={previewVideoRef}
             warning={warning}
             question={question}
             questionNumber={questionNumber}
@@ -337,8 +395,11 @@ function InterviewPage() {
             stopListening={stopListening}
             submitAnswer={submitAnswer}
             endInterview={endInterview}
+            retryAnswer={retryAnswer}
+            replayQuestion={replayQuestion}
             supportsSpeech={!!supportsSpeech}
-            secondsLeft={secondsLeft}
+            aiSpeaking={aiSpeaking}
+            camActive={camActive}
           />
         )}
       </div>
@@ -346,6 +407,9 @@ function InterviewPage() {
   );
 }
 
+// ============================================================================
+// Pre-interview Screen
+// ============================================================================
 function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoRef, supportsSpeech, totalQuestions }: {
   ctx: Ctx; permsGranted: boolean; onRequestPerms: () => void; onStart: () => void;
   videoRef: React.RefObject<HTMLVideoElement | null>; supportsSpeech: boolean; totalQuestions: number;
@@ -370,7 +434,7 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
             <li>Do not switch tabs or leave this window</li>
             <li>No external help — no notes, AI, or other people</li>
             <li>Stay in a quiet environment</li>
-            <li>{supportsSpeech ? "You may speak or type your answers" : "You will type your answers (voice not supported in this browser)"}</li>
+            <li>{supportsSpeech ? "Speak your answers — we'll show a live transcript" : "You will type your answers (voice not supported in this browser)"}</li>
           </ul>
           <div className="text-xs text-white/60 pt-2">Your webcam is recorded for the recruiter to review.</div>
         </div>
@@ -378,7 +442,7 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
 
       <div className="flex flex-col">
         <div className="aspect-video bg-black/40 rounded-xl border border-white/20 overflow-hidden relative">
-          <video ref={videoRef} muted playsInline className="w-full h-full object-cover" />
+          <video ref={videoRef} muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
           {!permsGranted && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white/70 gap-3">
               <Camera className="w-12 h-12" />
@@ -400,9 +464,12 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
   );
 }
 
+// ============================================================================
+// Active Interview — video-call layout
+// ============================================================================
 function InterviewActive(props: {
   ctx: Ctx;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  previewVideoRef: React.RefObject<HTMLVideoElement | null>;
   warning: string | null;
   question: string | null;
   questionNumber: number;
@@ -415,76 +482,206 @@ function InterviewActive(props: {
   stopListening: () => void;
   submitAnswer: () => void;
   endInterview: () => void;
+  retryAnswer: () => void;
+  replayQuestion: () => void;
   supportsSpeech: boolean;
-  secondsLeft: number | null;
+  aiSpeaking: boolean;
+  camActive: boolean;
 }) {
-  const { videoRef, warning, question, questionNumber, totalQuestions, thinking, answer, setAnswer,
-    listening, startListening, stopListening, submitAnswer, endInterview, supportsSpeech, secondsLeft } = props;
-  const lowTime = secondsLeft !== null && secondsLeft <= 60;
+  const { previewVideoRef, warning, question, questionNumber, totalQuestions, thinking, answer, setAnswer,
+    listening, startListening, stopListening, submitAnswer, endInterview, retryAnswer, replayQuestion,
+    supportsSpeech, aiSpeaking, camActive } = props;
+
   return (
-    <div className="flex-1 grid md:grid-cols-[1fr_240px] gap-6">
-      <div className="flex flex-col">
-        {warning && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg bg-destructive/20 border border-destructive/40 px-4 py-2.5 text-sm">
-            <ShieldAlert className="w-4 h-4 shrink-0" />
-            <span>{warning}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wider text-white/60">
+    <div className="flex-1 flex flex-col gap-4 relative">
+      {warning && (
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/20 border border-destructive/40 px-4 py-2.5 text-sm animate-fade-in">
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          <span>{warning}</span>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-[1.1fr_1fr] gap-4 flex-1 min-h-0">
+        {/* AI Avatar Stage */}
+        <div className="rounded-2xl bg-gradient-to-br from-white/10 to-white/0 backdrop-blur border border-white/20 p-6 flex flex-col items-center justify-center min-h-[360px] relative overflow-hidden">
+          <div className="absolute top-3 left-3 text-xs uppercase tracking-wider text-white/60">
             Question {questionNumber} of {totalQuestions}
           </div>
-          {secondsLeft !== null && (
-            <div className={`text-sm font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
-              ⏱ {fmtTime(secondsLeft)}
-            </div>
-          )}
-        </div>
-        <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-6 mb-4 min-h-[120px]">
-          {thinking && !question ? (
-            <div className="flex items-center gap-2 text-white/70"><Loader2 className="w-4 h-4 animate-spin" /> Thinking…</div>
-          ) : (
-            <p className="text-lg leading-relaxed">{question}</p>
-          )}
-        </div>
-
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder={listening ? "Listening… speak your answer" : "Type your answer or click the mic to speak"}
-          className="flex-1 min-h-[160px] rounded-xl bg-white/5 backdrop-blur border border-white/20 p-4 text-white placeholder:text-white/40 outline-none focus:border-accent resize-none"
-          disabled={thinking}
-        />
-
-        <div className="mt-4 flex flex-wrap gap-2 items-center">
-          {supportsSpeech && (
-            listening ? (
-              <Button onClick={stopListening} variant="secondary"><MicOff className="w-4 h-4 mr-2" /> Stop</Button>
+          <Avatar speaking={aiSpeaking} />
+          <div className="mt-2 text-sm text-white/70 font-medium">AI Interviewer</div>
+          <div className="mt-5 max-w-md text-center min-h-[80px] flex items-center justify-center">
+            {thinking && !question ? (
+              <div className="flex items-center gap-2 text-white/70"><Loader2 className="w-4 h-4 animate-spin" /> Thinking…</div>
             ) : (
-              <Button onClick={startListening} variant="secondary"><Mic className="w-4 h-4 mr-2" /> Speak</Button>
-            )
+              <p className="text-base md:text-lg leading-relaxed">{question}</p>
+            )}
+          </div>
+          {question && (
+            <Button size="sm" variant="ghost" className="mt-3 text-white/70 hover:text-white hover:bg-white/10" onClick={replayQuestion}>
+              <Volume2 className="w-3.5 h-3.5 mr-1.5" /> Replay
+            </Button>
           )}
-          <Button onClick={submitAnswer} disabled={thinking || !answer.trim()} className="bg-accent hover:bg-accent/90 text-accent-foreground ml-auto">
-            {thinking ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {questionNumber >= totalQuestions ? "Submit & finish" : "Submit answer"}
-          </Button>
-          <Button variant="ghost" onClick={endInterview} disabled={thinking} className="text-white/70 hover:text-white hover:bg-white/10">
-            End early
+        </div>
+
+        {/* Live Transcript Panel */}
+        <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/20 p-5 flex flex-col min-h-[360px]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${listening ? "bg-destructive animate-pulse" : "bg-white/40"}`} />
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-white/80">
+                {listening ? "Listening…" : "Your answer"}
+              </h2>
+            </div>
+            <span className="text-xs text-white/50">{answer.length} chars</span>
+          </div>
+
+          <textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            placeholder={listening
+              ? "Speak naturally — your words will appear here…"
+              : supportsSpeech
+                ? "Click the mic to speak, or type your answer here."
+                : "Type your answer here."}
+            className="flex-1 min-h-[160px] rounded-xl bg-black/20 border border-white/10 p-4 text-white placeholder:text-white/40 outline-none focus:border-accent resize-none text-sm leading-relaxed"
+            disabled={thinking}
+          />
+
+          <div className="mt-3 flex flex-wrap gap-2 items-center">
+            {supportsSpeech && (
+              listening ? (
+                <Button onClick={stopListening} variant="secondary" size="sm">
+                  <MicOff className="w-4 h-4 mr-2" /> Stop
+                </Button>
+              ) : (
+                <Button onClick={startListening} variant="secondary" size="sm">
+                  <Mic className="w-4 h-4 mr-2" /> Speak
+                </Button>
+              )
+            )}
+            {supportsSpeech && answer && (
+              <Button onClick={retryAnswer} variant="ghost" size="sm" className="text-white/70 hover:text-white hover:bg-white/10">
+                <RotateCcw className="w-4 h-4 mr-2" /> Retry
+              </Button>
+            )}
+            <Button
+              onClick={submitAnswer}
+              disabled={thinking || !answer.trim()}
+              className="bg-accent hover:bg-accent/90 text-accent-foreground ml-auto"
+              size="sm"
+            >
+              {thinking ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              {questionNumber >= totalQuestions ? "Submit & finish" : "Send answer"}
+            </Button>
+          </div>
+          <Button variant="ghost" onClick={endInterview} disabled={thinking} className="mt-2 text-xs text-white/50 hover:text-white hover:bg-white/10 self-end h-7">
+            End interview early
           </Button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="aspect-video bg-black/40 rounded-xl border border-white/20 overflow-hidden relative">
-          <video ref={videoRef} muted playsInline className="w-full h-full object-cover" />
-          <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-destructive/90 text-destructive-foreground px-2 py-1 rounded-md text-[10px] font-semibold">
-            <Video className="w-3 h-3" /> REC
-          </div>
+      {/* Floating candidate camera (bottom-right, video-call style) */}
+      <div className="fixed bottom-4 right-4 w-44 md:w-56 aspect-video rounded-xl overflow-hidden border-2 border-white/30 shadow-[var(--shadow-elev)] bg-black z-50">
+        <video ref={previewVideoRef} muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
+        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-destructive/90 text-destructive-foreground px-1.5 py-0.5 rounded text-[10px] font-bold">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> REC
         </div>
-        <div className="text-xs text-white/60 text-center">Camera must remain on throughout</div>
+        <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between text-[10px] text-white">
+          <span className="bg-black/60 px-1.5 py-0.5 rounded">You</span>
+          {!camActive && (
+            <span className="bg-destructive/90 px-1.5 py-0.5 rounded flex items-center gap-1">
+              <CameraOff className="w-3 h-3" /> off
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+// ============================================================================
+// AI Avatar (animated SVG)
+// ============================================================================
+function Avatar({ speaking }: { speaking: boolean }) {
+  return (
+    <div className="relative">
+      {/* Pulsing rings while speaking */}
+      <div className={`absolute inset-0 rounded-full ${speaking ? "animate-ping bg-accent/30" : ""}`} />
+      <div className={`absolute -inset-2 rounded-full border-2 ${speaking ? "border-accent/60 animate-pulse" : "border-white/20"}`} />
+      <div className="relative w-40 h-40 md:w-44 md:h-44 rounded-full bg-gradient-to-br from-accent via-primary to-primary/70 flex items-center justify-center shadow-2xl">
+        <svg viewBox="0 0 120 120" className="w-32 h-32 md:w-36 md:h-36">
+          {/* Face */}
+          <circle cx="60" cy="58" r="42" fill="#fde7d7" />
+          {/* Hair */}
+          <path d="M20 50 Q60 5 100 50 Q100 30 60 22 Q20 30 20 50 Z" fill="#3b2a1e" />
+          {/* Eyes */}
+          <ellipse cx="46" cy="58" rx="3.5" ry={speaking ? 3.5 : 4} fill="#1a1a2e">
+            <animate attributeName="ry" values="4;0.5;4" dur="5s" repeatCount="indefinite" />
+          </ellipse>
+          <ellipse cx="74" cy="58" rx="3.5" ry={speaking ? 3.5 : 4} fill="#1a1a2e">
+            <animate attributeName="ry" values="4;0.5;4" dur="5s" repeatCount="indefinite" />
+          </ellipse>
+          {/* Brows */}
+          <path d="M40 49 Q46 46 52 49" stroke="#3b2a1e" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path d="M68 49 Q74 46 80 49" stroke="#3b2a1e" strokeWidth="2" fill="none" strokeLinecap="round" />
+          {/* Nose */}
+          <path d="M60 62 L57 72 Q60 74 63 72" stroke="#d4a373" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+          {/* Mouth (lip-sync) */}
+          {speaking ? (
+            <ellipse cx="60" cy="83" rx="8" ry="5" fill="#7a2a2a">
+              <animate attributeName="ry" values="2;6;3;5;2" dur="0.5s" repeatCount="indefinite" />
+              <animate attributeName="rx" values="6;9;7;8;6" dur="0.5s" repeatCount="indefinite" />
+            </ellipse>
+          ) : (
+            <path d="M52 83 Q60 88 68 83" stroke="#7a2a2a" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          )}
+        </svg>
+      </div>
+      {speaking && (
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-accent/90 text-accent-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
+          <Bot className="w-3 h-3" /> Speaking
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Top proctoring status bar
+// ============================================================================
+function ProctorBar({ camActive, micActive, secondsLeft }: { camActive: boolean; micActive: boolean; secondsLeft: number | null }) {
+  const lowTime = secondsLeft !== null && secondsLeft <= 60;
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <StatusPill ok={camActive} okLabel="Camera ON" badLabel="Camera OFF" Icon={camActive ? Camera : CameraOff} />
+      <StatusPill ok={micActive} okLabel="Mic ON" badLabel="Mic OFF" Icon={micActive ? Mic : MicOff} />
+      {secondsLeft !== null && (
+        <div className={`font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
+          ⏱ {fmtTime(secondsLeft)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusPill({ ok, okLabel, badLabel, Icon }: { ok: boolean; okLabel: string; badLabel: string; Icon: any }) {
+  return (
+    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md ${ok ? "bg-success/20 text-success-foreground border border-success/30" : "bg-destructive/20 text-white border border-destructive/40"}`}>
+      <Icon className="w-3.5 h-3.5" />
+      <span className="hidden sm:inline">{ok ? okLabel : badLabel}</span>
+    </div>
+  );
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+function humanize(text: string): string {
+  // Add natural pauses & soft acknowledgements for a more conversational feel.
+  return text
+    .replace(/\?\s*/g, "? ")
+    .replace(/\.\s*/g, ". ")
+    .replace(/,\s*/g, ", ");
 }
 
 function Loading({ text }: { text: string }) {
