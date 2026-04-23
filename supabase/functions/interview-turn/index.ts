@@ -119,12 +119,18 @@ Interview configuration:
 - Difficulty: ${job.difficulty ?? "medium"} — ${difficultyGuidance(job.difficulty)}
 - Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)
 
+Style — speak like a friendly senior interviewer in a real video call:
+- Warm, conversational, natural. Use light fillers occasionally ("Got it.", "Interesting.", "Thanks for sharing.") before the next question.
+- Acknowledge the candidate's previous answer in ONE short sentence when relevant, then ask the next question.
+- Plain spoken English (no markdown, no bullet lists, no numbering). It will be read aloud by TTS.
+- Keep it concise: at most 2–3 short sentences total per turn.
+
 Rules:
-- Ask ONE concise question per turn (max 2 sentences).
+- Ask ONE clear question per turn.
 - Build on previous answers when relevant.
 - Question ${assistantTurns + 1} of ${maxQuestions}.
-- ${assistantTurns === 0 ? "Start with a warm greeting and your first question." : "Do not greet again, just ask the next question."}
-- Output only the question text, no preamble.`;
+- ${assistantTurns === 0 ? "Open with a warm greeting by name, a one-line intro, then your first question." : "Do not greet again."}
+- Output ONLY what the interviewer would say out loud.`;
 
     const conv = (messages ?? []).map((m) => ({
       role: m.role === "assistant" ? "assistant" : "user",
