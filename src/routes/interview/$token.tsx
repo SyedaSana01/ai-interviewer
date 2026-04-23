@@ -612,51 +612,95 @@ function InterviewActive(props: {
 }
 
 // ============================================================================
-// AI Avatar (animated SVG)
+// AI Avatar — realistic photo with audio-paced lip-sync overlay
 // ============================================================================
 function Avatar({ speaking }: { speaking: boolean }) {
+  const [mouthOpen, setMouthOpen] = useState(0); // 0..1
+  const [blink, setBlink] = useState(false);
+
+  // Syllable-paced mouth movement while speaking (60-90ms cycle, randomized for realism)
+  useEffect(() => {
+    if (!speaking) { setMouthOpen(0); return; }
+    let raf = 0;
+    let last = performance.now();
+    let target = Math.random();
+    let nextSwitch = 80 + Math.random() * 90;
+    const tick = (t: number) => {
+      const dt = t - last;
+      if (dt >= nextSwitch) {
+        target = 0.25 + Math.random() * 0.75;
+        nextSwitch = 70 + Math.random() * 110;
+        last = t;
+      }
+      setMouthOpen((cur) => cur + (target - cur) * 0.35);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [speaking]);
+
+  // Idle blink every 3.5–6s
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      setBlink(true);
+      setTimeout(() => setBlink(false), 140);
+      timeout = setTimeout(loop, 3500 + Math.random() * 2500);
+    };
+    timeout = setTimeout(loop, 2000);
+    return () => clearTimeout(timeout);
+  }, []);
+
   return (
-    <div className="relative">
-      {/* Pulsing rings while speaking */}
-      <div className={`absolute inset-0 rounded-full ${speaking ? "animate-ping bg-accent/30" : ""}`} />
-      <div className={`absolute -inset-2 rounded-full border-2 ${speaking ? "border-accent/60 animate-pulse" : "border-white/20"}`} />
-      <div className="relative w-40 h-40 md:w-44 md:h-44 rounded-full bg-gradient-to-br from-accent via-primary to-primary/70 flex items-center justify-center shadow-2xl">
-        <svg viewBox="0 0 120 120" className="w-32 h-32 md:w-36 md:h-36">
-          {/* Face */}
-          <circle cx="60" cy="58" r="42" fill="#fde7d7" />
-          {/* Hair */}
-          <path d="M20 50 Q60 5 100 50 Q100 30 60 22 Q20 30 20 50 Z" fill="#3b2a1e" />
-          {/* Eyes */}
-          <ellipse cx="46" cy="58" rx="3.5" ry={speaking ? 3.5 : 4} fill="#1a1a2e">
-            <animate attributeName="ry" values="4;0.5;4" dur="5s" repeatCount="indefinite" />
-          </ellipse>
-          <ellipse cx="74" cy="58" rx="3.5" ry={speaking ? 3.5 : 4} fill="#1a1a2e">
-            <animate attributeName="ry" values="4;0.5;4" dur="5s" repeatCount="indefinite" />
-          </ellipse>
-          {/* Brows */}
-          <path d="M40 49 Q46 46 52 49" stroke="#3b2a1e" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M68 49 Q74 46 80 49" stroke="#3b2a1e" strokeWidth="2" fill="none" strokeLinecap="round" />
-          {/* Nose */}
-          <path d="M60 62 L57 72 Q60 74 63 72" stroke="#d4a373" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-          {/* Mouth (lip-sync) */}
-          {speaking ? (
-            <ellipse cx="60" cy="83" rx="8" ry="5" fill="#7a2a2a">
-              <animate attributeName="ry" values="2;6;3;5;2" dur="0.5s" repeatCount="indefinite" />
-              <animate attributeName="rx" values="6;9;7;8;6" dur="0.5s" repeatCount="indefinite" />
-            </ellipse>
-          ) : (
-            <path d="M52 83 Q60 88 68 83" stroke="#7a2a2a" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-          )}
-        </svg>
+    <div className="absolute inset-0">
+      {/* Subtle breathing zoom on the whole portrait */}
+      <div
+        className="absolute inset-0 transition-transform duration-[4000ms] ease-in-out"
+        style={{ transform: speaking ? "scale(1.015)" : "scale(1.0)" }}
+      >
+        <img
+          src={interviewerPortrait}
+          alt="AI Interviewer Sarah"
+          className="w-full h-full object-cover"
+          draggable={false}
+        />
+
+        {/* Lip-sync overlay: a soft dark oval over the mouth area, scaled by mouthOpen */}
+        {/* Mouth region in source image is ~ (52% x, 56% y) of the frame */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: "44%",
+            top: "53%",
+            width: "12%",
+            height: "5%",
+            transform: `translate(-50%, -50%) scaleY(${0.15 + mouthOpen * 1.3}) scaleX(${0.9 + mouthOpen * 0.25})`,
+            transformOrigin: "center",
+            background: "radial-gradient(ellipse at center, rgba(60,15,15,0.92) 0%, rgba(60,15,15,0.55) 55%, rgba(60,15,15,0) 100%)",
+            borderRadius: "50%",
+            opacity: speaking ? 0.85 : 0,
+            transition: "opacity 200ms",
+            mixBlendMode: "multiply",
+          }}
+        />
+
+        {/* Blink overlays — thin dark bars over the eyes when blinking */}
+        {blink && (
+          <>
+            <div className="absolute pointer-events-none bg-[#3a2418]" style={{ left: "40%", top: "37.5%", width: "8%", height: "1.6%", borderRadius: "40%" }} />
+            <div className="absolute pointer-events-none bg-[#3a2418]" style={{ left: "58%", top: "37.5%", width: "8%", height: "1.6%", borderRadius: "40%" }} />
+          </>
+        )}
       </div>
+
+      {/* Speaking glow ring */}
       {speaking && (
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-accent/90 text-accent-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
-          <Bot className="w-3 h-3" /> Speaking
-        </div>
+        <div className="absolute inset-0 ring-4 ring-accent/40 rounded-2xl pointer-events-none animate-pulse" />
       )}
     </div>
   );
 }
+
 
 // ============================================================================
 // Top proctoring status bar
