@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Mic, MicOff, Sparkles, CheckCircle2, Loader2, Camera, ShieldAlert,
-  Video, Send, RotateCcw, Volume2, CameraOff, Bot,
+  Send, RotateCcw, Volume2, CameraOff, Wifi,
 } from "lucide-react";
+import interviewerPortrait from "@/assets/interviewer.jpg";
 
 export const Route = createFileRoute("/interview/$token")({
   component: InterviewPage,
