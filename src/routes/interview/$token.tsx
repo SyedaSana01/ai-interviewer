@@ -87,11 +87,14 @@ function InterviewPage() {
     if (!question || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const text = humanize(question);
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.98;
-    u.pitch = 1.0;
-    // Prefer a natural English voice if available
+    u.rate = 0.97;
+    u.pitch = 1.05;
+    // Prefer a natural female English voice
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => /en-(US|GB)/i.test(v.lang) && /Google|Natural|Samantha|Jenny|Aria/i.test(v.name))
+    const preferred =
+      voices.find(v => /en-(US|GB|AU)/i.test(v.lang) && /Samantha|Jenny|Aria|Sonia|Libby|Natasha|Google US English|Google UK English Female/i.test(v.name))
+      ?? voices.find(v => /en-(US|GB|AU)/i.test(v.lang) && /female/i.test(v.name))
+      ?? voices.find(v => /en-(US|GB|AU)/i.test(v.lang))
       ?? voices.find(v => /en/i.test(v.lang));
     if (preferred) u.voice = preferred;
     u.onstart = () => setAiSpeaking(true);
