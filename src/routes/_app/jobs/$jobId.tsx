@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractResumeText } from "@/lib/resumeParser";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info } from "lucide-react";
+import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info, Zap, Download } from "lucide-react";
 import { CandidateDrawer } from "@/components/CandidateDrawer";
+import { exportCandidatesXlsx } from "@/lib/exportCandidates";
 import type { Database } from "@/integrations/supabase/types";
 
 type Candidate = Database["public"]["Tables"]["candidates"]["Row"];
@@ -108,19 +109,30 @@ function JobDetail() {
   };
 
   const [bulkSending, setBulkSending] = useState(false);
-  const sendBulkInvites = async () => {
+  const sendBulkInvites = async (demoMode = false) => {
     const shortlistedCount = candidates.filter((c) => c.status === "shortlisted").length;
     if (shortlistedCount === 0) { toast.error("No shortlisted candidates to invite."); return; }
     setBulkSending(true);
-    toast.info(`Sending ${shortlistedCount} invite(s)…`);
+    toast.info(`Sending ${shortlistedCount} ${demoMode ? "demo " : ""}invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin },
+      body: { jobId, appUrl: window.location.origin, demoMode },
     });
     setBulkSending(false);
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites (TEST MODE → ${data.testRecipient})`);
+    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites${demoMode ? " (1-min demo)" : ""} (TEST MODE → ${data.testRecipient})`);
     else toast.warning(data?.note || "Invites processed.");
     load();
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const n = await exportCandidatesXlsx({ jobId, filename: `${job?.title?.replace(/\s+/g, "_") ?? "job"}-candidates.xlsx` });
+      toast.success(`Exported ${n} candidate(s) to Excel`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    } finally { setExporting(false); }
   };
 
   if (!job) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
@@ -170,17 +182,26 @@ function JobDetail() {
         </span>
       </div>
 
-      <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
         <div className="flex items-start gap-2 text-sm">
           <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
           <span className="text-amber-900 dark:text-amber-200">
-            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>, regardless of the candidate's address.
+            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>.
           </span>
         </div>
-        <Button size="sm" onClick={sendBulkInvites} disabled={bulkSending} className="shrink-0">
-          {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-          Send Interview Invites
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Excel report
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => sendBulkInvites(true)} disabled={bulkSending} title="1-minute, 3-question demo interview">
+            <Zap className="w-4 h-4 mr-2" /> Quick Demo (1 min)
+          </Button>
+          <Button size="sm" onClick={() => sendBulkInvites(false)} disabled={bulkSending}>
+            {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            Send Invites
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-1 mb-4 border-b">

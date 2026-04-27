@@ -11,6 +11,7 @@ const corsHeaders = {
 };
 
 function questionsForDuration(min: number) {
+  if (min <= 2) return 3;   // demo mode (1-minute quick interview)
   if (min <= 15) return 4;
   if (min <= 30) return 6;
   if (min <= 45) return 8;
@@ -41,19 +42,21 @@ Deno.serve(async (req) => {
 
     // Resolve candidate from invite token first, then legacy candidate token
     let cand: any = null;
+    let inviteDurationMinutes: number | null = null;
     const { data: invite } = await admin
       .from("interview_invites")
-      .select("candidate_id, expires_at, used_at")
+      .select("candidate_id, expires_at, used_at, duration_minutes")
       .eq("token", token)
       .maybeSingle();
     if (invite) {
       if (new Date(invite.expires_at).getTime() < Date.now()) {
         return json({ error: "Interview link expired" }, 410);
       }
-      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("id", invite.candidate_id).single();
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description, interview_duration, interview_type, difficulty)").eq("id", invite.candidate_id).single();
       cand = c;
+      inviteDurationMinutes = invite.duration_minutes ?? null;
     } else {
-      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("interview_token", token).maybeSingle();
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description, interview_duration, interview_type, difficulty)").eq("interview_token", token).maybeSingle();
       cand = c;
     }
     if (!cand) return json({ error: "Invalid interview link" }, 404);
@@ -102,13 +105,15 @@ Deno.serve(async (req) => {
 
     // Decide: end the interview?
     const job = (cand as any).jobs;
-    const maxQuestions = questionsForDuration(job?.interview_duration ?? 20);
+    const effectiveDuration = inviteDurationMinutes ?? (job?.interview_duration ?? 20);
+    const maxQuestions = questionsForDuration(effectiveDuration);
     if (action === "end" || assistantTurns >= maxQuestions) {
       await analyzeAndComplete(admin, lovableKey, interview.id, cand, job, messages ?? []);
       return json({ finished: true, interviewId: interview.id });
     }
 
     // Generate next question
+    const isDemo = effectiveDuration <= 2;
     const systemPrompt = `You are conducting a structured voice interview for a ${job.title} role.
 Job description: ${job.description.slice(0, 1500)}
 Candidate background: ${cand.experience_summary ?? "N/A"}
@@ -117,19 +122,19 @@ Skills: ${(cand.skills ?? []).join(", ")}
 Interview configuration:
 - Type: ${job.interview_type ?? "mixed"} — ${typeGuidance(job.interview_type)}
 - Difficulty: ${job.difficulty ?? "medium"} — ${difficultyGuidance(job.difficulty)}
-- Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)
+- Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)${isDemo ? "\n- DEMO MODE: super short questions (max 1 sentence). Skip filler. Be quick." : ""}
 
 Style — speak like a friendly senior interviewer in a real video call:
-- Warm, conversational, natural. Use light fillers occasionally ("Got it.", "Interesting.", "Thanks for sharing.") before the next question.
-- Acknowledge the candidate's previous answer in ONE short sentence when relevant, then ask the next question.
+- Warm, conversational, natural. ${isDemo ? "Skip greetings filler — get to questions fast." : 'Use light fillers occasionally ("Got it.", "Interesting.", "Thanks for sharing.") before the next question.'}
+- ${isDemo ? "Do NOT acknowledge previous answers — go straight to the next question." : "Acknowledge the candidate's previous answer in ONE short sentence when relevant, then ask the next question."}
 - Plain spoken English (no markdown, no bullet lists, no numbering). It will be read aloud by TTS.
-- Keep it concise: at most 2–3 short sentences total per turn.
+- Keep it concise: ${isDemo ? "ONE short sentence per turn." : "at most 2–3 short sentences total per turn."}
 
 Rules:
 - Ask ONE clear question per turn.
 - Build on previous answers when relevant.
 - Question ${assistantTurns + 1} of ${maxQuestions}.
-- ${assistantTurns === 0 ? "Open with a warm greeting by name, a one-line intro, then your first question." : "Do not greet again."}
+- ${assistantTurns === 0 ? (isDemo ? `Open with: "Hi ${cand.name}, let's begin." then your first question on the same line.` : "Open with a warm greeting by name, a one-line intro, then your first question.") : "Do not greet again."}
 - Output ONLY what the interviewer would say out loud.`;
 
     const conv = (messages ?? []).map((m) => ({
