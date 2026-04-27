@@ -182,17 +182,26 @@ function JobDetail() {
         </span>
       </div>
 
-      <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
         <div className="flex items-start gap-2 text-sm">
           <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
           <span className="text-amber-900 dark:text-amber-200">
-            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>, regardless of the candidate's address.
+            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>.
           </span>
         </div>
-        <Button size="sm" onClick={sendBulkInvites} disabled={bulkSending} className="shrink-0">
-          {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-          Send Interview Invites
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Excel report
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => sendBulkInvites(true)} disabled={bulkSending} title="1-minute, 3-question demo interview">
+            <Zap className="w-4 h-4 mr-2" /> Quick Demo (1 min)
+          </Button>
+          <Button size="sm" onClick={() => sendBulkInvites(false)} disabled={bulkSending}>
+            {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            Send Invites
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-1 mb-4 border-b">
