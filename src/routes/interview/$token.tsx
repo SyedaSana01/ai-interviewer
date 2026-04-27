@@ -5,9 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Mic, MicOff, Sparkles, CheckCircle2, Loader2, Camera, ShieldAlert,
-  Send, RotateCcw, Volume2, CameraOff, Wifi,
+  Send, RotateCcw, Volume2, CameraOff, Wifi, ShieldCheck, MessageSquare,
 } from "lucide-react";
-import interviewerPortrait from "@/assets/interviewer.jpg";
 
 export const Route = createFileRoute("/interview/$token")({
   component: InterviewPage,
@@ -28,6 +27,14 @@ interface Ctx {
 
 const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
 const DIFF_LABEL: Record<string, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+// Penalty per violation kind for integrity score
+const PENALTY: Record<string, number> = {
+  tab_switch: 10,
+  window_blur: 5,
+  camera_off: 15,
+  long_silence: 3,
+};
 
 function fmtTime(sec: number) {
   const m = Math.max(0, Math.floor(sec / 60));
@@ -55,11 +62,13 @@ function InterviewPage() {
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [camActive, setCamActive] = useState(false);
+  const [integrity, setIntegrity] = useState(100);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
   const supportsSpeech = typeof window !== "undefined" &&
     ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const supportsTTS = typeof window !== "undefined" && "speechSynthesis" in window;
 
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -67,7 +76,6 @@ function InterviewPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const lastSpeechAtRef = useRef<number>(Date.now());
-  const violationCountRef = useRef<number>(0);
 
   // ---- Load context
   useEffect(() => {
@@ -82,14 +90,12 @@ function InterviewPage() {
     })();
   }, [token]);
 
-  // ---- Speak question (with humanizer + speaking state)
+  // ---- Speak question via TTS (best-effort; UI still works without audio)
   useEffect(() => {
-    if (!question || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const text = humanize(question);
-    const u = new SpeechSynthesisUtterance(text);
+    if (!question || !supportsTTS) return;
+    const u = new SpeechSynthesisUtterance(question);
     u.rate = 0.97;
     u.pitch = 1.05;
-    // Prefer a natural female English voice
     const voices = window.speechSynthesis.getVoices();
     const preferred =
       voices.find(v => /en-(US|GB|AU)/i.test(v.lang) && /Samantha|Jenny|Aria|Sonia|Libby|Natasha|Google US English|Google UK English Female/i.test(v.name))
@@ -103,21 +109,21 @@ function InterviewPage() {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
     return () => { window.speechSynthesis.cancel(); setAiSpeaking(false); };
-  }, [question]);
+  }, [question, supportsTTS]);
 
   const showWarning = useCallback((msg: string) => {
     setWarning(msg);
-    violationCountRef.current += 1;
     setTimeout(() => setWarning((w) => (w === msg ? null : w)), 4000);
   }, []);
 
   const logViolation = useCallback(async (kind: string, detail?: string) => {
+    setIntegrity((s) => Math.max(0, s - (PENALTY[kind] ?? 5)));
     try {
       await supabase.functions.invoke("log-violation", { body: { token, kind, detail } });
     } catch (e) { console.warn("log-violation failed", e); }
   }, [token]);
 
-  // ---- Request camera + mic
+  // ---- Camera + mic permissions
   const attachStream = (s: MediaStream) => {
     streamRef.current = s;
     [videoRef.current, previewVideoRef.current].forEach((el) => {
@@ -144,7 +150,6 @@ function InterviewPage() {
     }
   };
 
-  // Re-attach stream to floating preview when interview becomes active
   useEffect(() => {
     if (started && streamRef.current && previewVideoRef.current) {
       previewVideoRef.current.srcObject = streamRef.current;
@@ -152,7 +157,7 @@ function InterviewPage() {
     }
   }, [started]);
 
-  // ---- Tab/visibility, blur, camera-off, silence detection
+  // ---- Proctoring: tab/visibility, blur, camera-off, silence
   useEffect(() => {
     if (!started || finished) return;
 
@@ -169,7 +174,7 @@ function InterviewPage() {
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
 
-    // camera-off detection + status indicator
+    let cameraOffStreak = 0;
     const cameraInterval = setInterval(() => {
       const vTrack = streamRef.current?.getVideoTracks()?.[0];
       const aTrack = streamRef.current?.getAudioTracks()?.[0];
@@ -178,12 +183,15 @@ function InterviewPage() {
       setCamActive(camOk);
       setMicActive(micOk);
       if (!camOk) {
+        cameraOffStreak += 1;
         showWarning("⚠️ Camera is off — please enable it to continue.");
-        logViolation("camera_off");
+        // Penalize once per ~10s of camera-off
+        if (cameraOffStreak === 1 || cameraOffStreak % 2 === 0) logViolation("camera_off");
+      } else {
+        cameraOffStreak = 0;
       }
     }, 5000);
 
-    // long silence detection (no answer typed/spoken in 90s)
     const silenceInterval = setInterval(() => {
       const since = Date.now() - lastSpeechAtRef.current;
       if (since > 90_000) {
@@ -203,7 +211,7 @@ function InterviewPage() {
 
   useEffect(() => { if (answer.trim().length > 0) lastSpeechAtRef.current = Date.now(); }, [answer]);
 
-  // ---- Start recording
+  // ---- Recording
   const startRecording = () => {
     if (!streamRef.current) return;
     try {
@@ -213,7 +221,7 @@ function InterviewPage() {
       const rec = new MediaRecorder(streamRef.current, { mimeType: mime });
       chunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.start(2000); // chunk every 2s
+      rec.start(2000);
       recorderRef.current = rec;
     } catch (e) {
       console.warn("MediaRecorder failed", e);
@@ -245,7 +253,7 @@ function InterviewPage() {
     streamRef.current = null;
   };
 
-  // ---- Interview API
+  // ---- Interview flow
   const startInterview = async () => {
     setStarted(true);
     setThinking(true);
@@ -290,7 +298,7 @@ function InterviewPage() {
     await finishInterview();
   }, [token]);
 
-  // ---- Countdown timer
+  // ---- Countdown
   useEffect(() => {
     if (!started || finished || secondsLeft === null) return;
     if (secondsLeft <= 0) {
@@ -335,15 +343,14 @@ function InterviewPage() {
   };
 
   const replayQuestion = () => {
-    if (!question || typeof window === "undefined") return;
+    if (!question || !supportsTTS) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(humanize(question));
+    const u = new SpeechSynthesisUtterance(question);
     u.onstart = () => setAiSpeaking(true);
     u.onend = () => setAiSpeaking(false);
     window.speechSynthesis.speak(u);
   };
 
-  // ---- Cleanup
   useEffect(() => () => { cleanupStream(); window.speechSynthesis?.cancel(); }, []);
 
   if (loading) return <Loading text="Loading interview…" />;
@@ -369,7 +376,7 @@ function InterviewPage() {
             <span className="font-semibold">HireFlow</span>
           </div>
           {started && (
-            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} />
+            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} integrity={integrity} />
           )}
         </div>
 
@@ -385,7 +392,6 @@ function InterviewPage() {
           />
         ) : (
           <InterviewActive
-            ctx={ctx}
             previewVideoRef={previewVideoRef}
             warning={warning}
             question={question}
@@ -402,6 +408,7 @@ function InterviewPage() {
             retryAnswer={retryAnswer}
             replayQuestion={replayQuestion}
             supportsSpeech={!!supportsSpeech}
+            supportsTTS={supportsTTS}
             aiSpeaking={aiSpeaking}
             camActive={camActive}
           />
@@ -419,11 +426,17 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
   videoRef: React.RefObject<HTMLVideoElement | null>; supportsSpeech: boolean; totalQuestions: number;
 }) {
   const start = ctx.scheduledAt ? new Date(ctx.scheduledAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }) : "Available now";
+  const isDemo = ctx.durationMinutes <= 2;
   return (
     <div className="grid md:grid-cols-2 gap-6 flex-1">
       <div>
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Hi {ctx.candidateName} 👋</h1>
         <p className="mt-3 text-lg text-white/80">Interview for <strong>{ctx.jobTitle}</strong></p>
+        {isDemo && (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent/20 border border-accent/40 px-3 py-1 text-xs font-semibold text-accent">
+            ⚡ Quick Demo Interview · 1 min
+          </div>
+        )}
         <div className="mt-6 space-y-2 text-sm text-white/80">
           <div>📅 <strong>Start:</strong> {start}</div>
           <div>⏱ <strong>Duration:</strong> ~{ctx.durationMinutes} min ({totalQuestions} questions)</div>
@@ -469,10 +482,9 @@ function PreInterviewScreen({ ctx, permsGranted, onRequestPerms, onStart, videoR
 }
 
 // ============================================================================
-// Active Interview — video-call layout
+// Active Interview — clean text-based interviewer card (no avatar)
 // ============================================================================
 function InterviewActive(props: {
-  ctx: Ctx;
   previewVideoRef: React.RefObject<HTMLVideoElement | null>;
   warning: string | null;
   question: string | null;
@@ -489,12 +501,13 @@ function InterviewActive(props: {
   retryAnswer: () => void;
   replayQuestion: () => void;
   supportsSpeech: boolean;
+  supportsTTS: boolean;
   aiSpeaking: boolean;
   camActive: boolean;
 }) {
   const { previewVideoRef, warning, question, questionNumber, totalQuestions, thinking, answer, setAnswer,
     listening, startListening, stopListening, submitAnswer, endInterview, retryAnswer, replayQuestion,
-    supportsSpeech, aiSpeaking, camActive } = props;
+    supportsSpeech, supportsTTS, aiSpeaking, camActive } = props;
 
   return (
     <div className="flex-1 flex flex-col gap-4 relative">
@@ -506,36 +519,52 @@ function InterviewActive(props: {
       )}
 
       <div className="grid md:grid-cols-[1.1fr_1fr] gap-4 flex-1 min-h-0">
-        {/* AI Avatar Stage — realistic human interviewer "video tile" */}
-        <div className="rounded-2xl bg-black/40 backdrop-blur border border-white/20 flex flex-col min-h-[360px] relative overflow-hidden">
-          <div className="absolute top-3 left-3 z-20 text-[10px] font-bold uppercase tracking-wider bg-black/50 text-white/90 px-2 py-1 rounded">
-            Question {questionNumber} of {totalQuestions}
-          </div>
-          <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-black/50 text-white/90 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-            <Wifi className="w-3 h-3 text-success" /> Live
+        {/* AI Interviewer card — clean text-based, no avatar */}
+        <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/20 flex flex-col min-h-[360px] relative overflow-hidden p-6 md:p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="text-[10px] font-bold uppercase tracking-wider bg-black/30 text-white/90 px-2 py-1 rounded">
+              Question {questionNumber} of {totalQuestions}
+            </div>
+            <div className="flex items-center gap-1.5 bg-black/30 text-white/90 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
+              <Wifi className="w-3 h-3 text-success" /> Live
+            </div>
           </div>
 
-          <Avatar speaking={aiSpeaking} />
-
-          {/* Caption overlay */}
-          <div className="absolute bottom-0 left-0 right-0 z-20 p-4 bg-gradient-to-t from-black/80 via-black/50 to-transparent">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-1 flex items-center gap-1.5">
+          {/* Speaking indicator (replaces avatar) */}
+          <div className="flex flex-col items-center justify-center mb-6">
+            <SpeakingPulse speaking={aiSpeaking} />
+            <div className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-accent flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${aiSpeaking ? "bg-accent animate-pulse" : "bg-white/40"}`} />
-              Sarah · AI Interviewer
+              {aiSpeaking ? "Sarah is speaking…" : "Sarah · AI Interviewer"}
             </div>
-            <div className="min-h-[48px] flex items-center">
-              {thinking && !question ? (
-                <div className="flex items-center gap-2 text-white/80 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Thinking…</div>
-              ) : (
-                <p className="text-sm md:text-base text-white leading-snug">{question}</p>
-              )}
-            </div>
-            {question && (
-              <button onClick={replayQuestion} className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/70 hover:text-white">
-                <Volume2 className="w-3 h-3" /> Replay
-              </button>
-            )}
           </div>
+
+          {/* Question text */}
+          <div className="flex-1 flex items-start">
+            <div className="w-full rounded-xl bg-black/20 border border-white/10 p-5">
+              {thinking && !question ? (
+                <div className="flex items-center gap-2 text-white/80 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Thinking…
+                </div>
+              ) : question ? (
+                <>
+                  <div className="flex items-start gap-2 mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/50">
+                    <MessageSquare className="w-3 h-3 mt-0.5" /> Question
+                  </div>
+                  <p className="text-base md:text-lg text-white leading-relaxed">{question}</p>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {question && supportsTTS && (
+            <button
+              onClick={replayQuestion}
+              className="mt-3 self-start inline-flex items-center gap-1.5 text-[11px] text-white/70 hover:text-white"
+            >
+              <Volume2 className="w-3 h-3" /> Replay question
+            </button>
+          )}
         </div>
 
         {/* Live Transcript Panel */}
@@ -595,7 +624,7 @@ function InterviewActive(props: {
         </div>
       </div>
 
-      {/* Floating candidate camera (bottom-right, video-call style) */}
+      {/* Floating candidate camera */}
       <div className="fixed bottom-4 right-4 w-44 md:w-56 aspect-video rounded-xl overflow-hidden border-2 border-white/30 shadow-[var(--shadow-elev)] bg-black z-50">
         <video ref={previewVideoRef} muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
         <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-destructive/90 text-destructive-foreground px-1.5 py-0.5 rounded text-[10px] font-bold">
@@ -615,103 +644,56 @@ function InterviewActive(props: {
 }
 
 // ============================================================================
-// AI Avatar — realistic photo with audio-paced lip-sync overlay
+// Speaking pulse — clean SVG audio bars (replaces broken avatar)
 // ============================================================================
-function Avatar({ speaking }: { speaking: boolean }) {
-  const [mouthOpen, setMouthOpen] = useState(0); // 0..1
-  const [blink, setBlink] = useState(false);
-
-  // Syllable-paced mouth movement while speaking (60-90ms cycle, randomized for realism)
-  useEffect(() => {
-    if (!speaking) { setMouthOpen(0); return; }
-    let raf = 0;
-    let last = performance.now();
-    let target = Math.random();
-    let nextSwitch = 80 + Math.random() * 90;
-    const tick = (t: number) => {
-      const dt = t - last;
-      if (dt >= nextSwitch) {
-        target = 0.25 + Math.random() * 0.75;
-        nextSwitch = 70 + Math.random() * 110;
-        last = t;
-      }
-      setMouthOpen((cur) => cur + (target - cur) * 0.35);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [speaking]);
-
-  // Idle blink every 3.5–6s
-  useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>;
-    const loop = () => {
-      setBlink(true);
-      setTimeout(() => setBlink(false), 140);
-      timeout = setTimeout(loop, 3500 + Math.random() * 2500);
-    };
-    timeout = setTimeout(loop, 2000);
-    return () => clearTimeout(timeout);
-  }, []);
-
+function SpeakingPulse({ speaking }: { speaking: boolean }) {
   return (
-    <div className="absolute inset-0">
-      {/* Subtle breathing zoom on the whole portrait */}
-      <div
-        className="absolute inset-0 transition-transform duration-[4000ms] ease-in-out"
-        style={{ transform: speaking ? "scale(1.015)" : "scale(1.0)" }}
-      >
-        <img
-          src={interviewerPortrait}
-          alt="AI Interviewer Sarah"
-          className="w-full h-full object-cover"
-          draggable={false}
-        />
-
-        {/* Lip-sync overlay: a soft dark oval over the mouth area, scaled by mouthOpen */}
-        {/* Mouth region in source image is ~ (52% x, 56% y) of the frame */}
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            left: "44%",
-            top: "53%",
-            width: "12%",
-            height: "5%",
-            transform: `translate(-50%, -50%) scaleY(${0.15 + mouthOpen * 1.3}) scaleX(${0.9 + mouthOpen * 0.25})`,
-            transformOrigin: "center",
-            background: "radial-gradient(ellipse at center, rgba(60,15,15,0.92) 0%, rgba(60,15,15,0.55) 55%, rgba(60,15,15,0) 100%)",
-            borderRadius: "50%",
-            opacity: speaking ? 0.85 : 0,
-            transition: "opacity 200ms",
-            mixBlendMode: "multiply",
-          }}
-        />
-
-        {/* Blink overlays — thin dark bars over the eyes when blinking */}
-        {blink && (
-          <>
-            <div className="absolute pointer-events-none bg-[#3a2418]" style={{ left: "40%", top: "37.5%", width: "8%", height: "1.6%", borderRadius: "40%" }} />
-            <div className="absolute pointer-events-none bg-[#3a2418]" style={{ left: "58%", top: "37.5%", width: "8%", height: "1.6%", borderRadius: "40%" }} />
-          </>
-        )}
+    <div className="relative flex items-center justify-center">
+      {/* Pulsing rings */}
+      <div className={`absolute w-32 h-32 rounded-full border-2 border-accent/30 ${speaking ? "animate-ping" : ""}`} />
+      <div className={`absolute w-24 h-24 rounded-full border-2 border-accent/40 ${speaking ? "animate-pulse" : ""}`} />
+      {/* Center disc with audio bars */}
+      <div className="relative w-20 h-20 rounded-full bg-[image:var(--gradient-accent)] flex items-center justify-center shadow-[var(--shadow-elev)]">
+        <div className="flex items-end gap-1 h-8">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span
+              key={i}
+              className="w-1.5 bg-accent-foreground rounded-full origin-bottom"
+              style={{
+                height: speaking ? `${30 + Math.sin((Date.now() / 200) + i) * 30 + 30}%` : "30%",
+                animation: speaking ? `pulseBar 0.6s ease-in-out ${i * 0.08}s infinite alternate` : "none",
+              }}
+            />
+          ))}
+        </div>
       </div>
-
-      {/* Speaking glow ring */}
-      {speaking && (
-        <div className="absolute inset-0 ring-4 ring-accent/40 rounded-2xl pointer-events-none animate-pulse" />
-      )}
+      <style>{`
+        @keyframes pulseBar {
+          0% { transform: scaleY(0.3); }
+          100% { transform: scaleY(1.2); }
+        }
+      `}</style>
     </div>
   );
 }
 
-
 // ============================================================================
 // Top proctoring status bar
 // ============================================================================
-function ProctorBar({ camActive, micActive, secondsLeft }: { camActive: boolean; micActive: boolean; secondsLeft: number | null }) {
+function ProctorBar({ camActive, micActive, secondsLeft, integrity }: {
+  camActive: boolean; micActive: boolean; secondsLeft: number | null; integrity: number;
+}) {
   const lowTime = secondsLeft !== null && secondsLeft <= 60;
+  const integrityColor =
+    integrity >= 80 ? "bg-success/20 text-success-foreground border-success/30"
+    : integrity >= 50 ? "bg-amber-500/20 text-amber-100 border-amber-500/40"
+    : "bg-destructive/20 text-white border-destructive/40";
   return (
     <div className="flex items-center gap-2 text-xs">
+      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${integrityColor}`} title="Integrity score — starts at 100, deducted on proctoring violations">
+        <ShieldCheck className="w-3.5 h-3.5" />
+        <span className="font-mono font-semibold tabular-nums">{integrity}%</span>
+      </div>
       <StatusPill ok={camActive} okLabel="Camera ON" badLabel="Camera OFF" Icon={camActive ? Camera : CameraOff} />
       <StatusPill ok={micActive} okLabel="Mic ON" badLabel="Mic OFF" Icon={micActive ? Mic : MicOff} />
       {secondsLeft !== null && (
@@ -730,17 +712,6 @@ function StatusPill({ ok, okLabel, badLabel, Icon }: { ok: boolean; okLabel: str
       <span className="hidden sm:inline">{ok ? okLabel : badLabel}</span>
     </div>
   );
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-function humanize(text: string): string {
-  // Add natural pauses & soft acknowledgements for a more conversational feel.
-  return text
-    .replace(/\?\s*/g, "? ")
-    .replace(/\.\s*/g, ". ")
-    .replace(/,\s*/g, ", ");
 }
 
 function Loading({ text }: { text: string }) {
