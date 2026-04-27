@@ -367,6 +367,10 @@ function InterviewPage() {
 
   if (loading) return <Loading text="Loading interview…" />;
   if (!ctx) return <CenteredCard title="Invalid interview link" body="This link may have expired or never existed." />;
+  if (terminated)
+    return (
+      <DisqualifiedCard reason={terminated.reason} />
+    );
   if (ctx.alreadyCompleted || finished)
     return (
       <CenteredCard
