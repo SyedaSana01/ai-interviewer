@@ -23,6 +23,7 @@ interface Ctx {
   interviewType: string;
   difficulty: string;
   alreadyCompleted: boolean;
+  candidateStatus?: string;
 }
 
 const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
@@ -367,9 +368,9 @@ function InterviewPage() {
 
   if (loading) return <Loading text="Loading interview…" />;
   if (!ctx) return <CenteredCard title="Invalid interview link" body="This link may have expired or never existed." />;
-  if (terminated)
+  if (terminated || ctx.candidateStatus === "final_rejected")
     return (
-      <DisqualifiedCard reason={terminated.reason} />
+      <DisqualifiedCard reason={terminated?.reason ?? "Previously disqualified — this interview cannot be resumed."} />
     );
   if (ctx.alreadyCompleted || finished)
     return (
