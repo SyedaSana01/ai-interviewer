@@ -11,6 +11,7 @@ const corsHeaders = {
 };
 
 function questionsForDuration(min: number) {
+  if (min <= 2) return 3;   // demo mode (1-minute quick interview)
   if (min <= 15) return 4;
   if (min <= 30) return 6;
   if (min <= 45) return 8;
