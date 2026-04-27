@@ -388,7 +388,7 @@ function InterviewPage() {
             <span className="font-semibold">HireFlow</span>
           </div>
           {started && (
-            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} integrity={integrity} />
+            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} />
           )}
         </div>
 
