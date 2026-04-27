@@ -263,10 +263,7 @@ function InterviewPage() {
     });
   };
 
-  const cleanupStream = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  };
+  // (cleanupStream defined above near terminateInterview)
 
   // ---- Interview flow
   const startInterview = async () => {
