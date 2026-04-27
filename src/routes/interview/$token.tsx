@@ -28,12 +28,15 @@ interface Ctx {
 const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
 const DIFF_LABEL: Record<string, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
-// Penalty per violation kind for integrity score
-const PENALTY: Record<string, number> = {
-  tab_switch: 10,
-  window_blur: 5,
-  camera_off: 15,
-  long_silence: 3,
+// Strict mode: ANY violation immediately terminates. Kept for completeness/UX labels.
+const VIOLATION_LABEL: Record<string, string> = {
+  tab_switch: "Tab/window switching detected",
+  window_blur: "Interview window lost focus",
+  camera_off: "Camera was turned off",
+  mic_off: "Microphone was muted",
+  long_silence: "Long inactivity / no response",
+  no_face: "No face detected on camera",
+  manual: "Manually ended",
 };
 
 function fmtTime(sec: number) {
