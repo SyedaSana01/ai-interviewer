@@ -65,7 +65,8 @@ function InterviewPage() {
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [camActive, setCamActive] = useState(false);
-  const [integrity, setIntegrity] = useState(100);
+  const [terminated, setTerminated] = useState<{ reason: string } | null>(null);
+  const terminatingRef = useRef(false);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
