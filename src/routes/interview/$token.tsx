@@ -120,11 +120,28 @@ function InterviewPage() {
     setTimeout(() => setWarning((w) => (w === msg ? null : w)), 4000);
   }, []);
 
-  const logViolation = useCallback(async (kind: string, detail?: string) => {
-    setIntegrity((s) => Math.max(0, s - (PENALTY[kind] ?? 5)));
+  const cleanupStream = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  // ---- STRICT: terminate immediately on ANY violation
+  const terminateInterview = useCallback(async (kind: string, detail?: string) => {
+    if (terminatingRef.current) return;
+    terminatingRef.current = true;
+    const reason = VIOLATION_LABEL[kind] ?? kind;
+    setTerminated({ reason });
+    // Stop everything client-side immediately for instant UX
+    try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+    try { recogRef.current?.stop(); } catch { /* ignore */ }
+    try { recorderRef.current?.stop(); } catch { /* ignore */ }
+    cleanupStream();
+    // Fire-and-forget server termination — UI does not wait
     try {
-      await supabase.functions.invoke("log-violation", { body: { token, kind, detail } });
-    } catch (e) { console.warn("log-violation failed", e); }
+      await supabase.functions.invoke("terminate-interview", {
+        body: { token, kind, detail: detail ?? reason },
+      });
+    } catch (e) { console.warn("terminate failed", e); }
   }, [token]);
 
   // ---- Camera + mic permissions
@@ -161,57 +178,51 @@ function InterviewPage() {
     }
   }, [started]);
 
-  // ---- Proctoring: tab/visibility, blur, camera-off, silence
+  // ---- STRICT proctoring: zero-tolerance — first violation terminates
   useEffect(() => {
-    if (!started || finished) return;
+    if (!started || finished || terminated) return;
+    const isDemo = (ctx?.durationMinutes ?? 20) <= 2;
+    // Demo (1-min) is harsher: 20s silence kills; full interview: 90s
+    const SILENCE_LIMIT_MS = isDemo ? 20_000 : 90_000;
 
     const onVis = () => {
-      if (document.hidden) {
-        showWarning("⚠️ Tab switching detected — please stay on this page.");
-        logViolation("tab_switch", "document hidden");
-      }
+      if (document.hidden) terminateInterview("tab_switch", "document hidden");
     };
     const onBlur = () => {
-      showWarning("⚠️ Window lost focus — please return to the interview.");
-      logViolation("window_blur");
+      // Ignore blur if it's because permissions/picker dialog opened
+      if (document.hidden) return;
+      terminateInterview("window_blur", "window lost focus");
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
 
-    let cameraOffStreak = 0;
-    const cameraInterval = setInterval(() => {
+    const monitorInterval = setInterval(() => {
+      if (terminatingRef.current) return;
       const vTrack = streamRef.current?.getVideoTracks()?.[0];
       const aTrack = streamRef.current?.getAudioTracks()?.[0];
       const camOk = !!vTrack && vTrack.readyState === "live" && !vTrack.muted && vTrack.enabled;
-      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled;
+      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled && !aTrack.muted;
       setCamActive(camOk);
       setMicActive(micOk);
-      if (!camOk) {
-        cameraOffStreak += 1;
-        showWarning("⚠️ Camera is off — please enable it to continue.");
-        // Penalize once per ~10s of camera-off
-        if (cameraOffStreak === 1 || cameraOffStreak % 2 === 0) logViolation("camera_off");
-      } else {
-        cameraOffStreak = 0;
-      }
-    }, 5000);
+      if (!camOk) { terminateInterview("camera_off", "video track not live"); return; }
+      if (!micOk) { terminateInterview("mic_off", "audio track muted/ended"); return; }
+    }, 1500);
 
     const silenceInterval = setInterval(() => {
+      if (terminatingRef.current) return;
       const since = Date.now() - lastSpeechAtRef.current;
-      if (since > 90_000) {
-        showWarning("⚠️ Long silence detected — please answer or click Skip.");
-        logViolation("long_silence", `${Math.round(since / 1000)}s`);
-        lastSpeechAtRef.current = Date.now();
+      if (since > SILENCE_LIMIT_MS) {
+        terminateInterview("long_silence", `${Math.round(since / 1000)}s of inactivity`);
       }
-    }, 15_000);
+    }, 2000);
 
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("blur", onBlur);
-      clearInterval(cameraInterval);
+      clearInterval(monitorInterval);
       clearInterval(silenceInterval);
     };
-  }, [started, finished, showWarning, logViolation]);
+  }, [started, finished, terminated, ctx?.durationMinutes, terminateInterview]);
 
   useEffect(() => { if (answer.trim().length > 0) lastSpeechAtRef.current = Date.now(); }, [answer]);
 
