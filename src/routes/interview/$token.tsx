@@ -23,17 +23,21 @@ interface Ctx {
   interviewType: string;
   difficulty: string;
   alreadyCompleted: boolean;
+  candidateStatus?: string;
 }
 
 const TYPE_LABEL: Record<string, string> = { technical: "Technical", hr: "HR / Behavioural", mixed: "Mixed" };
 const DIFF_LABEL: Record<string, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
-// Penalty per violation kind for integrity score
-const PENALTY: Record<string, number> = {
-  tab_switch: 10,
-  window_blur: 5,
-  camera_off: 15,
-  long_silence: 3,
+// Strict mode: ANY violation immediately terminates. Kept for completeness/UX labels.
+const VIOLATION_LABEL: Record<string, string> = {
+  tab_switch: "Tab/window switching detected",
+  window_blur: "Interview window lost focus",
+  camera_off: "Camera was turned off",
+  mic_off: "Microphone was muted",
+  long_silence: "Long inactivity / no response",
+  no_face: "No face detected on camera",
+  manual: "Manually ended",
 };
 
 function fmtTime(sec: number) {
@@ -62,7 +66,8 @@ function InterviewPage() {
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [camActive, setCamActive] = useState(false);
-  const [integrity, setIntegrity] = useState(100);
+  const [terminated, setTerminated] = useState<{ reason: string } | null>(null);
+  const terminatingRef = useRef(false);
 
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
@@ -116,11 +121,28 @@ function InterviewPage() {
     setTimeout(() => setWarning((w) => (w === msg ? null : w)), 4000);
   }, []);
 
-  const logViolation = useCallback(async (kind: string, detail?: string) => {
-    setIntegrity((s) => Math.max(0, s - (PENALTY[kind] ?? 5)));
+  const cleanupStream = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  // ---- STRICT: terminate immediately on ANY violation
+  const terminateInterview = useCallback(async (kind: string, detail?: string) => {
+    if (terminatingRef.current) return;
+    terminatingRef.current = true;
+    const reason = VIOLATION_LABEL[kind] ?? kind;
+    setTerminated({ reason });
+    // Stop everything client-side immediately for instant UX
+    try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+    try { recogRef.current?.stop(); } catch { /* ignore */ }
+    try { recorderRef.current?.stop(); } catch { /* ignore */ }
+    cleanupStream();
+    // Fire-and-forget server termination — UI does not wait
     try {
-      await supabase.functions.invoke("log-violation", { body: { token, kind, detail } });
-    } catch (e) { console.warn("log-violation failed", e); }
+      await supabase.functions.invoke("terminate-interview", {
+        body: { token, kind, detail: detail ?? reason },
+      });
+    } catch (e) { console.warn("terminate failed", e); }
   }, [token]);
 
   // ---- Camera + mic permissions
@@ -157,57 +179,51 @@ function InterviewPage() {
     }
   }, [started]);
 
-  // ---- Proctoring: tab/visibility, blur, camera-off, silence
+  // ---- STRICT proctoring: zero-tolerance — first violation terminates
   useEffect(() => {
-    if (!started || finished) return;
+    if (!started || finished || terminated) return;
+    const isDemo = (ctx?.durationMinutes ?? 20) <= 2;
+    // Demo (1-min) is harsher: 20s silence kills; full interview: 90s
+    const SILENCE_LIMIT_MS = isDemo ? 20_000 : 90_000;
 
     const onVis = () => {
-      if (document.hidden) {
-        showWarning("⚠️ Tab switching detected — please stay on this page.");
-        logViolation("tab_switch", "document hidden");
-      }
+      if (document.hidden) terminateInterview("tab_switch", "document hidden");
     };
     const onBlur = () => {
-      showWarning("⚠️ Window lost focus — please return to the interview.");
-      logViolation("window_blur");
+      // Ignore blur if it's because permissions/picker dialog opened
+      if (document.hidden) return;
+      terminateInterview("window_blur", "window lost focus");
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
 
-    let cameraOffStreak = 0;
-    const cameraInterval = setInterval(() => {
+    const monitorInterval = setInterval(() => {
+      if (terminatingRef.current) return;
       const vTrack = streamRef.current?.getVideoTracks()?.[0];
       const aTrack = streamRef.current?.getAudioTracks()?.[0];
       const camOk = !!vTrack && vTrack.readyState === "live" && !vTrack.muted && vTrack.enabled;
-      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled;
+      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled && !aTrack.muted;
       setCamActive(camOk);
       setMicActive(micOk);
-      if (!camOk) {
-        cameraOffStreak += 1;
-        showWarning("⚠️ Camera is off — please enable it to continue.");
-        // Penalize once per ~10s of camera-off
-        if (cameraOffStreak === 1 || cameraOffStreak % 2 === 0) logViolation("camera_off");
-      } else {
-        cameraOffStreak = 0;
-      }
-    }, 5000);
+      if (!camOk) { terminateInterview("camera_off", "video track not live"); return; }
+      if (!micOk) { terminateInterview("mic_off", "audio track muted/ended"); return; }
+    }, 1500);
 
     const silenceInterval = setInterval(() => {
+      if (terminatingRef.current) return;
       const since = Date.now() - lastSpeechAtRef.current;
-      if (since > 90_000) {
-        showWarning("⚠️ Long silence detected — please answer or click Skip.");
-        logViolation("long_silence", `${Math.round(since / 1000)}s`);
-        lastSpeechAtRef.current = Date.now();
+      if (since > SILENCE_LIMIT_MS) {
+        terminateInterview("long_silence", `${Math.round(since / 1000)}s of inactivity`);
       }
-    }, 15_000);
+    }, 2000);
 
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("blur", onBlur);
-      clearInterval(cameraInterval);
+      clearInterval(monitorInterval);
       clearInterval(silenceInterval);
     };
-  }, [started, finished, showWarning, logViolation]);
+  }, [started, finished, terminated, ctx?.durationMinutes, terminateInterview]);
 
   useEffect(() => { if (answer.trim().length > 0) lastSpeechAtRef.current = Date.now(); }, [answer]);
 
@@ -248,10 +264,7 @@ function InterviewPage() {
     });
   };
 
-  const cleanupStream = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  };
+  // (cleanupStream defined above near terminateInterview)
 
   // ---- Interview flow
   const startInterview = async () => {
@@ -355,6 +368,10 @@ function InterviewPage() {
 
   if (loading) return <Loading text="Loading interview…" />;
   if (!ctx) return <CenteredCard title="Invalid interview link" body="This link may have expired or never existed." />;
+  if (terminated || ctx.candidateStatus === "final_rejected")
+    return (
+      <DisqualifiedCard reason={terminated?.reason ?? "Previously disqualified — this interview cannot be resumed."} />
+    );
   if (ctx.alreadyCompleted || finished)
     return (
       <CenteredCard
@@ -376,7 +393,7 @@ function InterviewPage() {
             <span className="font-semibold">HireFlow</span>
           </div>
           {started && (
-            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} integrity={integrity} />
+            <ProctorBar camActive={camActive} micActive={micActive} secondsLeft={secondsLeft} />
           )}
         </div>
 
@@ -680,24 +697,23 @@ function SpeakingPulse({ speaking }: { speaking: boolean }) {
 // ============================================================================
 // Top proctoring status bar
 // ============================================================================
-function ProctorBar({ camActive, micActive, secondsLeft, integrity }: {
-  camActive: boolean; micActive: boolean; secondsLeft: number | null; integrity: number;
+function ProctorBar({ camActive, micActive, secondsLeft }: {
+  camActive: boolean; micActive: boolean; secondsLeft: number | null;
 }) {
-  const lowTime = secondsLeft !== null && secondsLeft <= 60;
-  const integrityColor =
-    integrity >= 80 ? "bg-success/20 text-success-foreground border-success/30"
-    : integrity >= 50 ? "bg-amber-500/20 text-amber-100 border-amber-500/40"
-    : "bg-destructive/20 text-white border-destructive/40";
+  const lowTime = secondsLeft !== null && secondsLeft <= 30;
   return (
     <div className="flex items-center gap-2 text-xs">
-      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${integrityColor}`} title="Integrity score — starts at 100, deducted on proctoring violations">
+      <div
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-destructive/20 text-white border-destructive/40 animate-pulse"
+        title="Strict proctoring is active — any violation immediately ends the interview."
+      >
         <ShieldCheck className="w-3.5 h-3.5" />
-        <span className="font-mono font-semibold tabular-nums">{integrity}%</span>
+        <span className="font-semibold uppercase tracking-wider">Proctoring</span>
       </div>
       <StatusPill ok={camActive} okLabel="Camera ON" badLabel="Camera OFF" Icon={camActive ? Camera : CameraOff} />
       <StatusPill ok={micActive} okLabel="Mic ON" badLabel="Mic OFF" Icon={micActive ? Mic : MicOff} />
       {secondsLeft !== null && (
-        <div className={`font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
+        <div className={`font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/40 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
           ⏱ {fmtTime(secondsLeft)}
         </div>
       )}
@@ -724,6 +740,31 @@ function CenteredCard({ icon, title, body }: { icon?: React.ReactNode; title: st
         {icon && <div className="flex justify-center">{icon}</div>}
         <h1 className="text-2xl font-semibold">{title}</h1>
         <p className="mt-3 text-muted-foreground">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function DisqualifiedCard({ reason }: { reason: string }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-red-950 via-red-900 to-black flex items-center justify-center p-6">
+      <div className="bg-card rounded-2xl p-10 max-w-lg text-center shadow-[var(--shadow-elev)] border-2 border-destructive/50">
+        <div className="flex justify-center mb-4">
+          <div className="w-20 h-20 rounded-full bg-destructive/15 flex items-center justify-center">
+            <ShieldAlert className="w-10 h-10 text-destructive" />
+          </div>
+        </div>
+        <h1 className="text-2xl font-bold text-destructive">Interview terminated</h1>
+        <p className="mt-3 text-base font-medium text-foreground">
+          Interview terminated due to malpractice detection.
+        </p>
+        <div className="mt-5 rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-left">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-destructive mb-1">Reason</div>
+          <div className="text-sm font-medium text-foreground">{reason}</div>
+        </div>
+        <p className="mt-5 text-sm text-muted-foreground">
+          Your status has been set to <strong className="text-destructive">Disqualified</strong>. This interview cannot be resumed or retried. The recruiter has been notified.
+        </p>
       </div>
     </div>
   );

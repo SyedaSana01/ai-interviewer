@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.upload-recording]
 verify_jwt = false
+
+[functions.terminate-interview]
+verify_jwt = false
