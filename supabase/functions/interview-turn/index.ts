@@ -110,6 +110,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate next question
+    const isDemo = (job?.interview_duration ?? 20) <= 2;
     const systemPrompt = `You are conducting a structured voice interview for a ${job.title} role.
 Job description: ${job.description.slice(0, 1500)}
 Candidate background: ${cand.experience_summary ?? "N/A"}
@@ -118,19 +119,19 @@ Skills: ${(cand.skills ?? []).join(", ")}
 Interview configuration:
 - Type: ${job.interview_type ?? "mixed"} — ${typeGuidance(job.interview_type)}
 - Difficulty: ${job.difficulty ?? "medium"} — ${difficultyGuidance(job.difficulty)}
-- Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)
+- Duration: ~${job.interview_duration ?? 20} minutes (${maxQuestions} questions total)${isDemo ? "\n- DEMO MODE: super short questions (max 1 sentence). Skip filler. Be quick." : ""}
 
 Style — speak like a friendly senior interviewer in a real video call:
-- Warm, conversational, natural. Use light fillers occasionally ("Got it.", "Interesting.", "Thanks for sharing.") before the next question.
-- Acknowledge the candidate's previous answer in ONE short sentence when relevant, then ask the next question.
+- Warm, conversational, natural. ${isDemo ? "Skip greetings filler — get to questions fast." : 'Use light fillers occasionally ("Got it.", "Interesting.", "Thanks for sharing.") before the next question.'}
+- ${isDemo ? "Do NOT acknowledge previous answers — go straight to the next question." : "Acknowledge the candidate's previous answer in ONE short sentence when relevant, then ask the next question."}
 - Plain spoken English (no markdown, no bullet lists, no numbering). It will be read aloud by TTS.
-- Keep it concise: at most 2–3 short sentences total per turn.
+- Keep it concise: ${isDemo ? "ONE short sentence per turn." : "at most 2–3 short sentences total per turn."}
 
 Rules:
 - Ask ONE clear question per turn.
 - Build on previous answers when relevant.
 - Question ${assistantTurns + 1} of ${maxQuestions}.
-- ${assistantTurns === 0 ? "Open with a warm greeting by name, a one-line intro, then your first question." : "Do not greet again."}
+- ${assistantTurns === 0 ? (isDemo ? `Open with: "Hi ${cand.name}, let's begin." then your first question on the same line.` : "Open with a warm greeting by name, a one-line intro, then your first question.") : "Do not greet again."}
 - Output ONLY what the interviewer would say out loud.`;
 
     const conv = (messages ?? []).map((m) => ({
