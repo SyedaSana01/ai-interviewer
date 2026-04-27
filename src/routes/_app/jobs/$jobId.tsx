@@ -109,19 +109,30 @@ function JobDetail() {
   };
 
   const [bulkSending, setBulkSending] = useState(false);
-  const sendBulkInvites = async () => {
+  const sendBulkInvites = async (demoMode = false) => {
     const shortlistedCount = candidates.filter((c) => c.status === "shortlisted").length;
     if (shortlistedCount === 0) { toast.error("No shortlisted candidates to invite."); return; }
     setBulkSending(true);
-    toast.info(`Sending ${shortlistedCount} invite(s)…`);
+    toast.info(`Sending ${shortlistedCount} ${demoMode ? "demo " : ""}invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin },
+      body: { jobId, appUrl: window.location.origin, demoMode },
     });
     setBulkSending(false);
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites (TEST MODE → ${data.testRecipient})`);
+    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites${demoMode ? " (1-min demo)" : ""} (TEST MODE → ${data.testRecipient})`);
     else toast.warning(data?.note || "Invites processed.");
     load();
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const n = await exportCandidatesXlsx({ jobId, filename: `${job?.title?.replace(/\s+/g, "_") ?? "job"}-candidates.xlsx` });
+      toast.success(`Exported ${n} candidate(s) to Excel`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    } finally { setExporting(false); }
   };
 
   if (!job) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
