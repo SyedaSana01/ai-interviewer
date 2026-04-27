@@ -42,19 +42,21 @@ Deno.serve(async (req) => {
 
     // Resolve candidate from invite token first, then legacy candidate token
     let cand: any = null;
+    let inviteDurationMinutes: number | null = null;
     const { data: invite } = await admin
       .from("interview_invites")
-      .select("candidate_id, expires_at, used_at")
+      .select("candidate_id, expires_at, used_at, duration_minutes")
       .eq("token", token)
       .maybeSingle();
     if (invite) {
       if (new Date(invite.expires_at).getTime() < Date.now()) {
         return json({ error: "Interview link expired" }, 410);
       }
-      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("id", invite.candidate_id).single();
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description, interview_duration, interview_type, difficulty)").eq("id", invite.candidate_id).single();
       cand = c;
+      inviteDurationMinutes = invite.duration_minutes ?? null;
     } else {
-      const { data: c } = await admin.from("candidates").select("*, jobs(title, description)").eq("interview_token", token).maybeSingle();
+      const { data: c } = await admin.from("candidates").select("*, jobs(title, description, interview_duration, interview_type, difficulty)").eq("interview_token", token).maybeSingle();
       cand = c;
     }
     if (!cand) return json({ error: "Invalid interview link" }, 404);
