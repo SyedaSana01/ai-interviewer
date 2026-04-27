@@ -105,14 +105,15 @@ Deno.serve(async (req) => {
 
     // Decide: end the interview?
     const job = (cand as any).jobs;
-    const maxQuestions = questionsForDuration(job?.interview_duration ?? 20);
+    const effectiveDuration = inviteDurationMinutes ?? (job?.interview_duration ?? 20);
+    const maxQuestions = questionsForDuration(effectiveDuration);
     if (action === "end" || assistantTurns >= maxQuestions) {
       await analyzeAndComplete(admin, lovableKey, interview.id, cand, job, messages ?? []);
       return json({ finished: true, interviewId: interview.id });
     }
 
     // Generate next question
-    const isDemo = (job?.interview_duration ?? 20) <= 2;
+    const isDemo = effectiveDuration <= 2;
     const systemPrompt = `You are conducting a structured voice interview for a ${job.title} role.
 Job description: ${job.description.slice(0, 1500)}
 Candidate background: ${cand.experience_summary ?? "N/A"}
