@@ -692,24 +692,23 @@ function SpeakingPulse({ speaking }: { speaking: boolean }) {
 // ============================================================================
 // Top proctoring status bar
 // ============================================================================
-function ProctorBar({ camActive, micActive, secondsLeft, integrity }: {
-  camActive: boolean; micActive: boolean; secondsLeft: number | null; integrity: number;
+function ProctorBar({ camActive, micActive, secondsLeft }: {
+  camActive: boolean; micActive: boolean; secondsLeft: number | null;
 }) {
-  const lowTime = secondsLeft !== null && secondsLeft <= 60;
-  const integrityColor =
-    integrity >= 80 ? "bg-success/20 text-success-foreground border-success/30"
-    : integrity >= 50 ? "bg-amber-500/20 text-amber-100 border-amber-500/40"
-    : "bg-destructive/20 text-white border-destructive/40";
+  const lowTime = secondsLeft !== null && secondsLeft <= 30;
   return (
     <div className="flex items-center gap-2 text-xs">
-      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${integrityColor}`} title="Integrity score — starts at 100, deducted on proctoring violations">
+      <div
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-destructive/20 text-white border-destructive/40 animate-pulse"
+        title="Strict proctoring is active — any violation immediately ends the interview."
+      >
         <ShieldCheck className="w-3.5 h-3.5" />
-        <span className="font-mono font-semibold tabular-nums">{integrity}%</span>
+        <span className="font-semibold uppercase tracking-wider">Proctoring</span>
       </div>
       <StatusPill ok={camActive} okLabel="Camera ON" badLabel="Camera OFF" Icon={camActive ? Camera : CameraOff} />
       <StatusPill ok={micActive} okLabel="Mic ON" badLabel="Mic OFF" Icon={micActive ? Mic : MicOff} />
       {secondsLeft !== null && (
-        <div className={`font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/30 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
+        <div className={`font-mono font-semibold tabular-nums px-3 py-1 rounded-md ${lowTime ? "bg-destructive/40 text-white animate-pulse" : "bg-white/10 text-white/90"}`}>
           ⏱ {fmtTime(secondsLeft)}
         </div>
       )}
