@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     if (!userData.user) return json({ error: "Unauthorized" }, 401);
 
     const admin = createClient(supabaseUrl, supabaseService);
-    const { jobId, appUrl } = await req.json() as { jobId: string; appUrl: string };
+    const { jobId, appUrl, demoMode } = await req.json() as { jobId: string; appUrl: string; demoMode?: boolean };
 
     const { data: job } = await admin.from("jobs").select("*").eq("id", jobId).single();
     if (!job || job.recruiter_id !== userData.user.id) return json({ error: "Job not found" }, 404);
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, count: 0, note: "No shortlisted candidates to invite." });
     }
 
-    const jobDuration = (job as any).interview_duration ?? 20;
+    const jobDuration = demoMode ? 1 : ((job as any).interview_duration ?? 20);
     const jobType = (job as any).interview_type ?? "mixed";
     const jobDifficulty = (job as any).difficulty ?? "medium";
 
