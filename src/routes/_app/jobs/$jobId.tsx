@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractResumeText } from "@/lib/resumeParser";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info } from "lucide-react";
+import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info, Zap, Download } from "lucide-react";
 import { CandidateDrawer } from "@/components/CandidateDrawer";
+import { exportCandidatesXlsx } from "@/lib/exportCandidates";
 import type { Database } from "@/integrations/supabase/types";
 
 type Candidate = Database["public"]["Tables"]["candidates"]["Row"];
