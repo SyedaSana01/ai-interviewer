@@ -743,3 +743,28 @@ function CenteredCard({ icon, title, body }: { icon?: React.ReactNode; title: st
     </div>
   );
 }
+
+function DisqualifiedCard({ reason }: { reason: string }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-red-950 via-red-900 to-black flex items-center justify-center p-6">
+      <div className="bg-card rounded-2xl p-10 max-w-lg text-center shadow-[var(--shadow-elev)] border-2 border-destructive/50">
+        <div className="flex justify-center mb-4">
+          <div className="w-20 h-20 rounded-full bg-destructive/15 flex items-center justify-center">
+            <ShieldAlert className="w-10 h-10 text-destructive" />
+          </div>
+        </div>
+        <h1 className="text-2xl font-bold text-destructive">Interview terminated</h1>
+        <p className="mt-3 text-base font-medium text-foreground">
+          Interview terminated due to malpractice detection.
+        </p>
+        <div className="mt-5 rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-left">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-destructive mb-1">Reason</div>
+          <div className="text-sm font-medium text-foreground">{reason}</div>
+        </div>
+        <p className="mt-5 text-sm text-muted-foreground">
+          Your status has been set to <strong className="text-destructive">Disqualified</strong>. This interview cannot be resumed or retried. The recruiter has been notified.
+        </p>
+      </div>
+    </div>
+  );
+}
