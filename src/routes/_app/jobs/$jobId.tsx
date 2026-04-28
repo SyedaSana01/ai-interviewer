@@ -97,21 +97,22 @@ function JobDetail() {
     }
   };
 
+  const [sendToSelf, setSendToSelf] = useState(true);
+
   const sendInvite = async (candidateId: string) => {
     toast.info("Sending interview invite…");
     const { data, error } = await supabase.functions.invoke("send-candidate-email", {
-      body: { candidateId, kind: "interview_invite", appUrl: window.location.origin },
+      body: { candidateId, kind: "interview_invite", appUrl: window.location.origin, sendToSelf },
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(`❌ ${error.message}`); return; }
     if (data?.sent) {
-      toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
+      toast.success(`✅ Email sent to ${data.recipient}`);
     } else if (data?.inviteUrl) {
-      // Email fallback: copy link
       try { await navigator.clipboard.writeText(data.inviteUrl); } catch { /* ignore */ }
-      toast.warning("Email not sent — invite link copied to clipboard.", { duration: 6000 });
-      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false }]);
+      toast.warning(`❌ Email failed${data?.note ? ` (${data.note})` : ""} — link copied.`, { duration: 7000 });
+      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false, error: data?.note }]);
     } else {
-      toast.warning(data?.note || "Invite simulated. Status updated.");
+      toast.warning(data?.note || "Invite simulated.");
     }
     load();
   };
@@ -125,14 +126,17 @@ function JobDetail() {
     setInviteLinks([]);
     toast.info(`Sending ${shortlistedCount} invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin },
+      body: { jobId, appUrl: window.location.origin, sendToSelf },
     });
     setBulkSending(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(`❌ ${error.message}`); return; }
     const list = (data?.invites ?? []) as typeof inviteLinks;
     setInviteLinks(list);
-    if (data?.sent > 0) toast.success(`Sent ${data.sent}/${data.count} invite(s) (TEST MODE → ${data.testRecipient})`);
-    if (data?.failed > 0) toast.warning(`${data.failed} email(s) failed — links shown below.`);
+    if (data?.sent > 0) {
+      const target = sendToSelf ? `TEST MODE → ${data.testRecipient}` : "candidate emails";
+      toast.success(`✅ Sent ${data.sent}/${data.count} invite(s) (${target})`);
+    }
+    if (data?.failed > 0) toast.warning(`⚠️ ${data.failed} email(s) failed — links shown below.`);
     load();
   };
 
@@ -203,7 +207,28 @@ function JobDetail() {
         <div className="flex items-start gap-2 text-sm">
           <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
           <span className="text-amber-900 dark:text-amber-200">
-            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>.
+            <strong>Send invites to:</strong>
+          </span>
+          <div className="inline-flex rounded-md border border-amber-300 overflow-hidden text-xs">
+            <button
+              type="button"
+              onClick={() => setSendToSelf(true)}
+              className={`px-3 py-1 ${sendToSelf ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100"}`}
+            >
+              My email (Test)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSendToSelf(false)}
+              className={`px-3 py-1 ${!sendToSelf ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100"}`}
+            >
+              Candidate email
+            </button>
+          </div>
+          <span className="text-xs text-amber-800/80">
+            {sendToSelf
+              ? "→ syedasuhasana0504@gmail.com"
+              : "→ real candidate (may fail in Resend test mode)"}
           </span>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">

@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     if (!userData.user) return json({ error: "Unauthorized" }, 401);
 
     const admin = createClient(supabaseUrl, supabaseService);
-    const { jobId, appUrl } = await req.json() as { jobId: string; appUrl: string };
+    const { jobId, appUrl, sendToSelf } = await req.json() as { jobId: string; appUrl: string; sendToSelf?: boolean };
 
     const { data: job } = await admin.from("jobs").select("*").eq("id", jobId).single();
     if (!job || job.recruiter_id !== userData.user.id) return json({ error: "Job not found" }, 404);
@@ -79,10 +79,12 @@ Deno.serve(async (req) => {
           difficulty: jobDifficulty,
         });
 
+        const toAddress = sendToSelf === false ? c.email : TEST_RECIPIENT;
         const result = await sendViaResend({
           resendKey, lovableKey,
           subject: `AI Interview Invitation – ${job.title}`,
           html,
+          to: toAddress,
         });
         const wasSent = !!result.sent;
         if (wasSent) {

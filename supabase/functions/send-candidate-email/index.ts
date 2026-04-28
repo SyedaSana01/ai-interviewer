@@ -30,9 +30,10 @@ Deno.serve(async (req) => {
     if (!userData.user) return json({ error: "Unauthorized" }, 401);
 
     const admin = createClient(supabaseUrl, supabaseService);
-    const { candidateId, kind, appUrl } = await req.json() as {
-      candidateId: string; kind: EmailKind; appUrl: string;
+    const { candidateId, kind, appUrl, sendToSelf } = await req.json() as {
+      candidateId: string; kind: EmailKind; appUrl: string; sendToSelf?: boolean;
     };
+    const recipient = sendToSelf === false ? undefined : TEST_RECIPIENT; // undefined = use candidate.email below
 
     const { data: cand } = await admin
       .from("candidates")
@@ -77,7 +78,8 @@ Deno.serve(async (req) => {
       await admin.from("candidates").update({ status: "final_rejected" }).eq("id", candidateId);
     }
 
-    const sendResult = await sendViaResend({ resendKey, lovableKey, subject, html });
+    const toAddress = recipient ?? cand.email;
+    const sendResult = await sendViaResend({ resendKey, lovableKey, subject, html, to: toAddress });
     const inviteUrl = kind === "interview_invite"
       ? `${appUrl}/interview/${(await admin.from("interview_invites").select("token").eq("candidate_id", cand.id).order("created_at", { ascending: false }).limit(1).single()).data?.token}`
       : undefined;
