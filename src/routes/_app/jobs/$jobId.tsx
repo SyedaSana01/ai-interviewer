@@ -211,15 +211,43 @@ function JobDetail() {
             {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
             Excel report
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => sendBulkInvites(true)} disabled={bulkSending} title="1-minute, 3-question demo interview">
-            <Zap className="w-4 h-4 mr-2" /> Quick Demo (1 min)
-          </Button>
-          <Button size="sm" onClick={() => sendBulkInvites(false)} disabled={bulkSending}>
+          <Button size="sm" onClick={() => sendBulkInvites()} disabled={bulkSending}>
             {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
             Send Invites
           </Button>
         </div>
       </div>
+
+      {inviteLinks.length > 0 && (
+        <div className="mb-6 rounded-lg border bg-card shadow-[var(--shadow-soft)] overflow-hidden">
+          <div className="px-4 py-3 border-b bg-secondary/40 flex items-center justify-between">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              Interview links (fallback)
+            </div>
+            <button onClick={() => setInviteLinks([])} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+          </div>
+          <ul className="divide-y text-sm">
+            {inviteLinks.map((inv, i) => (
+              <li key={i} className="px-4 py-2 flex items-center gap-3">
+                {inv.sent
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate">{inv.name} <span className="text-xs text-muted-foreground">{inv.email}</span></div>
+                  {inv.url && <div className="text-xs text-muted-foreground truncate font-mono">{inv.url}</div>}
+                  {!inv.sent && inv.error && <div className="text-xs text-amber-700">⚠ {inv.error}</div>}
+                </div>
+                {inv.url && (
+                  <Button size="sm" variant="outline" onClick={() => copyLink(inv.url)}>
+                    <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex gap-1 mb-4 border-b">
         {FILTERS.map((f) => {
