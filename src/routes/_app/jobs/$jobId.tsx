@@ -264,9 +264,14 @@ function JobDetail() {
                   {!inv.sent && inv.error && <div className="text-xs text-amber-700">⚠ {inv.error}</div>}
                 </div>
                 {inv.url && (
-                  <Button size="sm" variant="outline" onClick={() => copyLink(inv.url)}>
-                    <Copy className="w-3.5 h-3.5 mr-1" /> Copy
-                  </Button>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => copyLink(inv.url)}>
+                      <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={inv.url} target="_blank" rel="noreferrer">Open</a>
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
