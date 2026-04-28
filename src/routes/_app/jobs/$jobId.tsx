@@ -207,7 +207,32 @@ function JobDetail() {
         <div className="flex items-start gap-2 text-sm">
           <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
           <span className="text-amber-900 dark:text-amber-200">
-            <strong>Test mode:</strong> all interview emails are sent to <code className="font-mono text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/50 rounded">syedasuhasana0504@gmail.com</code>.
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+        <div className="flex items-start gap-2 text-sm">
+          <Info className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
+          <span className="text-amber-900 dark:text-amber-200">
+            <strong>Send invites to:</strong>
+          </span>
+          <div className="inline-flex rounded-md border border-amber-300 overflow-hidden text-xs">
+            <button
+              type="button"
+              onClick={() => setSendToSelf(true)}
+              className={`px-3 py-1 ${sendToSelf ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100"}`}
+            >
+              My email (Test)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSendToSelf(false)}
+              className={`px-3 py-1 ${!sendToSelf ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100"}`}
+            >
+              Candidate email
+            </button>
+          </div>
+          <span className="text-xs text-amber-800/80">
+            {sendToSelf
+              ? "→ syedasuhasana0504@gmail.com"
+              : "→ real candidate (may fail in Resend test mode)"}
           </span>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
