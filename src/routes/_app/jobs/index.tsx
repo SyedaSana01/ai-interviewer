@@ -105,7 +105,7 @@ function JobsList() {
                   <Select value={duration} onValueChange={setDuration}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">⚡ 1 min (demo)</SelectItem>
+                      <SelectItem value="1">⚡ 1 min (quick)</SelectItem>
                       <SelectItem value="15">15 min</SelectItem>
                       <SelectItem value="30">30 min</SelectItem>
                       <SelectItem value="45">45 min</SelectItem>
