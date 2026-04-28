@@ -79,10 +79,12 @@ Deno.serve(async (req) => {
           difficulty: jobDifficulty,
         });
 
+        const toAddress = sendToSelf === false ? c.email : TEST_RECIPIENT;
         const result = await sendViaResend({
           resendKey, lovableKey,
           subject: `AI Interview Invitation – ${job.title}`,
           html,
+          to: toAddress,
         });
         const wasSent = !!result.sent;
         if (wasSent) {
