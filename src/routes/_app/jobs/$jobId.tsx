@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractResumeText } from "@/lib/resumeParser";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info, Zap, Download } from "lucide-react";
+import { ArrowLeft, Upload, Mail, Loader2, FileText, Eye, Send, Info, Download, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
 import { CandidateDrawer } from "@/components/CandidateDrawer";
 import { exportCandidatesXlsx } from "@/lib/exportCandidates";
 import type { Database } from "@/integrations/supabase/types";
@@ -103,25 +103,42 @@ function JobDetail() {
       body: { candidateId, kind: "interview_invite", appUrl: window.location.origin },
     });
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
-    else toast.warning(data?.note || "Invite simulated. Status updated.");
+    if (data?.sent) {
+      toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
+    } else if (data?.inviteUrl) {
+      // Email fallback: copy link
+      try { await navigator.clipboard.writeText(data.inviteUrl); } catch { /* ignore */ }
+      toast.warning("Email not sent — invite link copied to clipboard.", { duration: 6000 });
+      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false }]);
+    } else {
+      toast.warning(data?.note || "Invite simulated. Status updated.");
+    }
     load();
   };
 
   const [bulkSending, setBulkSending] = useState(false);
-  const sendBulkInvites = async (demoMode = false) => {
+  const [inviteLinks, setInviteLinks] = useState<{ name: string; email: string; url: string; sent: boolean; error?: string }[]>([]);
+  const sendBulkInvites = async () => {
     const shortlistedCount = candidates.filter((c) => c.status === "shortlisted").length;
     if (shortlistedCount === 0) { toast.error("No shortlisted candidates to invite."); return; }
     setBulkSending(true);
-    toast.info(`Sending ${shortlistedCount} ${demoMode ? "demo " : ""}invite(s)…`);
+    setInviteLinks([]);
+    toast.info(`Sending ${shortlistedCount} invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin, demoMode },
+      body: { jobId, appUrl: window.location.origin },
     });
     setBulkSending(false);
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites${demoMode ? " (1-min demo)" : ""} (TEST MODE → ${data.testRecipient})`);
-    else toast.warning(data?.note || "Invites processed.");
+    const list = (data?.invites ?? []) as typeof inviteLinks;
+    setInviteLinks(list);
+    if (data?.sent > 0) toast.success(`Sent ${data.sent}/${data.count} invite(s) (TEST MODE → ${data.testRecipient})`);
+    if (data?.failed > 0) toast.warning(`${data.failed} email(s) failed — links shown below.`);
     load();
+  };
+
+  const copyLink = async (url: string) => {
+    try { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    catch { toast.error("Copy failed"); }
   };
 
   const [exporting, setExporting] = useState(false);
@@ -194,15 +211,43 @@ function JobDetail() {
             {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
             Excel report
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => sendBulkInvites(true)} disabled={bulkSending} title="1-minute, 3-question demo interview">
-            <Zap className="w-4 h-4 mr-2" /> Quick Demo (1 min)
-          </Button>
-          <Button size="sm" onClick={() => sendBulkInvites(false)} disabled={bulkSending}>
+          <Button size="sm" onClick={() => sendBulkInvites()} disabled={bulkSending}>
             {bulkSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
             Send Invites
           </Button>
         </div>
       </div>
+
+      {inviteLinks.length > 0 && (
+        <div className="mb-6 rounded-lg border bg-card shadow-[var(--shadow-soft)] overflow-hidden">
+          <div className="px-4 py-3 border-b bg-secondary/40 flex items-center justify-between">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              Interview links (fallback)
+            </div>
+            <button onClick={() => setInviteLinks([])} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+          </div>
+          <ul className="divide-y text-sm">
+            {inviteLinks.map((inv, i) => (
+              <li key={i} className="px-4 py-2 flex items-center gap-3">
+                {inv.sent
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate">{inv.name} <span className="text-xs text-muted-foreground">{inv.email}</span></div>
+                  {inv.url && <div className="text-xs text-muted-foreground truncate font-mono">{inv.url}</div>}
+                  {!inv.sent && inv.error && <div className="text-xs text-amber-700">⚠ {inv.error}</div>}
+                </div>
+                {inv.url && (
+                  <Button size="sm" variant="outline" onClick={() => copyLink(inv.url)}>
+                    <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex gap-1 mb-4 border-b">
         {FILTERS.map((f) => {

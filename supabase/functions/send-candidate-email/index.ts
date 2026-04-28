@@ -78,7 +78,10 @@ Deno.serve(async (req) => {
     }
 
     const sendResult = await sendViaResend({ resendKey, lovableKey, subject, html });
-    return json({ ok: true, ...sendResult });
+    const inviteUrl = kind === "interview_invite"
+      ? `${appUrl}/interview/${(await admin.from("interview_invites").select("token").eq("candidate_id", cand.id).order("created_at", { ascending: false }).limit(1).single()).data?.token}`
+      : undefined;
+    return json({ ok: true, ...sendResult, inviteUrl });
   } catch (e) {
     console.error(e);
     return json({ error: e instanceof Error ? e.message : "Unknown" }, 500);
