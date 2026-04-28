@@ -179,34 +179,53 @@ function InterviewPage() {
     }
   }, [started]);
 
-  // ---- STRICT proctoring: zero-tolerance — first violation terminates
+  // ---- STRICT proctoring: zero-tolerance — first SUSTAINED violation terminates
   useEffect(() => {
     if (!started || finished || terminated) return;
     const isDemo = (ctx?.durationMinutes ?? 20) <= 2;
-    // Demo (1-min) is harsher: 20s silence kills; full interview: 90s
     const SILENCE_LIMIT_MS = isDemo ? 20_000 : 90_000;
 
+    // Grace period after starting — browsers fire spurious blur/mute events
+    // immediately after getUserMedia / play(). Ignore violations for 3s.
+    const startedAt = Date.now();
+    const GRACE_MS = 3000;
+    const inGrace = () => Date.now() - startedAt < GRACE_MS;
+
     const onVis = () => {
+      if (inGrace()) return;
       if (document.hidden) terminateInterview("tab_switch", "document hidden");
     };
     const onBlur = () => {
-      // Ignore blur if it's because permissions/picker dialog opened
+      if (inGrace()) return;
       if (document.hidden) return;
-      terminateInterview("window_blur", "window lost focus");
+      // Ignore blur if focus moved to another element in the same document
+      // (e.g. clicking an input, opening a permission picker)
+      setTimeout(() => {
+        if (document.hasFocus()) return;
+        if (document.hidden) return; // tab_switch handler covers this
+        terminateInterview("window_blur", "window lost focus");
+      }, 400);
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
 
+    // Require 2 consecutive failed checks (~3s) before terminating, and
+    // do NOT use track.muted — it flips true during normal silence.
+    let camFailStreak = 0;
+    let micFailStreak = 0;
     const monitorInterval = setInterval(() => {
       if (terminatingRef.current) return;
       const vTrack = streamRef.current?.getVideoTracks()?.[0];
       const aTrack = streamRef.current?.getAudioTracks()?.[0];
-      const camOk = !!vTrack && vTrack.readyState === "live" && !vTrack.muted && vTrack.enabled;
-      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled && !aTrack.muted;
+      const camOk = !!vTrack && vTrack.readyState === "live" && vTrack.enabled;
+      const micOk = !!aTrack && aTrack.readyState === "live" && aTrack.enabled;
       setCamActive(camOk);
       setMicActive(micOk);
-      if (!camOk) { terminateInterview("camera_off", "video track not live"); return; }
-      if (!micOk) { terminateInterview("mic_off", "audio track muted/ended"); return; }
+      if (inGrace()) return;
+      camFailStreak = camOk ? 0 : camFailStreak + 1;
+      micFailStreak = micOk ? 0 : micFailStreak + 1;
+      if (camFailStreak >= 2) { terminateInterview("camera_off", "video track not live"); return; }
+      if (micFailStreak >= 2) { terminateInterview("mic_off", "audio track ended/disabled"); return; }
     }, 1500);
 
     const silenceInterval = setInterval(() => {
