@@ -56,10 +56,12 @@ export function inviteHtml(opts: {
 
 export async function sendViaResend(opts: {
   resendKey?: string; lovableKey?: string; subject: string; html: string;
-}): Promise<{ sent?: boolean; simulated?: boolean; testRecipient?: string; note?: string }> {
+  to?: string;
+}): Promise<{ sent?: boolean; simulated?: boolean; recipient?: string; testRecipient?: string; note?: string }> {
   if (!opts.resendKey) {
     return { simulated: true, note: "RESEND_API_KEY not configured" };
   }
+  const recipient = opts.to || TEST_RECIPIENT;
   try {
     const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
       method: "POST",
@@ -70,7 +72,7 @@ export async function sendViaResend(opts: {
       },
       body: JSON.stringify({
         from: FROM_ADDRESS,
-        to: [TEST_RECIPIENT],
+        to: [recipient],
         subject: opts.subject,
         html: opts.html,
       }),
@@ -78,11 +80,11 @@ export async function sendViaResend(opts: {
     if (!res.ok) {
       const txt = await res.text();
       console.warn("Resend send failed", res.status, txt);
-      return { simulated: true, note: `Resend error ${res.status}` };
+      return { simulated: true, note: `Resend error ${res.status}: ${txt.slice(0, 200)}`, recipient };
     }
-    return { sent: true, testRecipient: TEST_RECIPIENT };
+    return { sent: true, recipient, testRecipient: TEST_RECIPIENT };
   } catch (e) {
     console.warn("Resend send threw", e);
-    return { simulated: true, note: "Resend exception" };
+    return { simulated: true, note: `Resend exception: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
