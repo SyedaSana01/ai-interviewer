@@ -103,25 +103,42 @@ function JobDetail() {
       body: { candidateId, kind: "interview_invite", appUrl: window.location.origin },
     });
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
-    else toast.warning(data?.note || "Invite simulated. Status updated.");
+    if (data?.sent) {
+      toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
+    } else if (data?.inviteUrl) {
+      // Email fallback: copy link
+      try { await navigator.clipboard.writeText(data.inviteUrl); } catch { /* ignore */ }
+      toast.warning("Email not sent — invite link copied to clipboard.", { duration: 6000 });
+      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false }]);
+    } else {
+      toast.warning(data?.note || "Invite simulated. Status updated.");
+    }
     load();
   };
 
   const [bulkSending, setBulkSending] = useState(false);
-  const sendBulkInvites = async (demoMode = false) => {
+  const [inviteLinks, setInviteLinks] = useState<{ name: string; email: string; url: string; sent: boolean; error?: string }[]>([]);
+  const sendBulkInvites = async () => {
     const shortlistedCount = candidates.filter((c) => c.status === "shortlisted").length;
     if (shortlistedCount === 0) { toast.error("No shortlisted candidates to invite."); return; }
     setBulkSending(true);
-    toast.info(`Sending ${shortlistedCount} ${demoMode ? "demo " : ""}invite(s)…`);
+    setInviteLinks([]);
+    toast.info(`Sending ${shortlistedCount} invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin, demoMode },
+      body: { jobId, appUrl: window.location.origin },
     });
     setBulkSending(false);
     if (error) { toast.error(error.message); return; }
-    if (data?.sent) toast.success(`Sent ${data.sent}/${data.count} invites${demoMode ? " (1-min demo)" : ""} (TEST MODE → ${data.testRecipient})`);
-    else toast.warning(data?.note || "Invites processed.");
+    const list = (data?.invites ?? []) as typeof inviteLinks;
+    setInviteLinks(list);
+    if (data?.sent > 0) toast.success(`Sent ${data.sent}/${data.count} invite(s) (TEST MODE → ${data.testRecipient})`);
+    if (data?.failed > 0) toast.warning(`${data.failed} email(s) failed — links shown below.`);
     load();
+  };
+
+  const copyLink = async (url: string) => {
+    try { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    catch { toast.error("Copy failed"); }
   };
 
   const [exporting, setExporting] = useState(false);
