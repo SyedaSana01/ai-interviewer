@@ -30,9 +30,10 @@ Deno.serve(async (req) => {
     if (!userData.user) return json({ error: "Unauthorized" }, 401);
 
     const admin = createClient(supabaseUrl, supabaseService);
-    const { candidateId, kind, appUrl } = await req.json() as {
-      candidateId: string; kind: EmailKind; appUrl: string;
+    const { candidateId, kind, appUrl, sendToSelf } = await req.json() as {
+      candidateId: string; kind: EmailKind; appUrl: string; sendToSelf?: boolean;
     };
+    const recipient = sendToSelf === false ? undefined : TEST_RECIPIENT; // undefined = use candidate.email below
 
     const { data: cand } = await admin
       .from("candidates")
