@@ -97,21 +97,22 @@ function JobDetail() {
     }
   };
 
+  const [sendToSelf, setSendToSelf] = useState(true);
+
   const sendInvite = async (candidateId: string) => {
     toast.info("Sending interview invite…");
     const { data, error } = await supabase.functions.invoke("send-candidate-email", {
-      body: { candidateId, kind: "interview_invite", appUrl: window.location.origin },
+      body: { candidateId, kind: "interview_invite", appUrl: window.location.origin, sendToSelf },
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(`❌ ${error.message}`); return; }
     if (data?.sent) {
-      toast.success(`Invite sent (TEST MODE → ${data.testRecipient})`);
+      toast.success(`✅ Email sent to ${data.recipient}`);
     } else if (data?.inviteUrl) {
-      // Email fallback: copy link
       try { await navigator.clipboard.writeText(data.inviteUrl); } catch { /* ignore */ }
-      toast.warning("Email not sent — invite link copied to clipboard.", { duration: 6000 });
-      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false }]);
+      toast.warning(`❌ Email failed${data?.note ? ` (${data.note})` : ""} — link copied.`, { duration: 7000 });
+      setInviteLinks([{ name: "Candidate", email: "", url: data.inviteUrl, sent: false, error: data?.note }]);
     } else {
-      toast.warning(data?.note || "Invite simulated. Status updated.");
+      toast.warning(data?.note || "Invite simulated.");
     }
     load();
   };
@@ -125,14 +126,17 @@ function JobDetail() {
     setInviteLinks([]);
     toast.info(`Sending ${shortlistedCount} invite(s)…`);
     const { data, error } = await supabase.functions.invoke("send-interview-invites", {
-      body: { jobId, appUrl: window.location.origin },
+      body: { jobId, appUrl: window.location.origin, sendToSelf },
     });
     setBulkSending(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(`❌ ${error.message}`); return; }
     const list = (data?.invites ?? []) as typeof inviteLinks;
     setInviteLinks(list);
-    if (data?.sent > 0) toast.success(`Sent ${data.sent}/${data.count} invite(s) (TEST MODE → ${data.testRecipient})`);
-    if (data?.failed > 0) toast.warning(`${data.failed} email(s) failed — links shown below.`);
+    if (data?.sent > 0) {
+      const target = sendToSelf ? `TEST MODE → ${data.testRecipient}` : "candidate emails";
+      toast.success(`✅ Sent ${data.sent}/${data.count} invite(s) (${target})`);
+    }
+    if (data?.failed > 0) toast.warning(`⚠️ ${data.failed} email(s) failed — links shown below.`);
     load();
   };
 
