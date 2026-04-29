@@ -1,8 +1,8 @@
-#🚀 AI-Powered Recruitment & Interview Platform
+🚀 AI-Powered Recruitment & Interview Platform
 
 An end-to-end AI-driven hiring system that automates candidate screening, conducts proctored AI interviews, and generates actionable hiring insights for recruiters.
 
-#🎯 Overview
+🎯 Overview
 
 This platform enables recruiters to:
 
@@ -13,7 +13,7 @@ Conduct real-time AI interviews
 Monitor candidates with strict proctoring
 Generate reports and hiring recommendations
 
-#✨ Key Features
+✨ Key Features
 
 🧠 AI Resume Shortlisting
 
@@ -32,22 +32,22 @@ Difficulty level
 Quick interview with 2–3 questions
 Ideal for fast demonstrations
 
-#🎥 Proctored Interview System
+🎥 Proctored Interview System
 Camera & microphone monitoring
 Detects:
 Tab switching
 Camera OFF
 Inactivity
 
-#🚨 Strict Rule:
+🚨 Strict Rule:
 Interview is automatically terminated on malpractice.
 
-#📊 AI Evaluation & Scoring
+📊 AI Evaluation & Scoring
 Communication score
 Technical score
 Confidence score
 
-#🎯 Hiring Decision Engine
+🎯 Hiring Decision Engine
 Automatically classifies candidates:
 ✅ Hire
 🤔 Maybe
@@ -60,18 +60,18 @@ Email
 Score
 Role
 
-#📊 Excel Report Export
+📊 Excel Report Export
 Download recruiter-ready reports
 Includes:
 Candidate details
 Scores
 Final decision
 
-#📩 Email Integration
+📩 Email Integration
 Sends interview invites & results via Resend
 Currently supports test mode for demo
 
-#🏗️ System Flow
+🏗️ System Flow
 
 Recruiter → Upload JD + Resumes
         ↓
@@ -87,7 +87,7 @@ System → Generates Report + Hiring Decision
         ↓
 Recruiter → Downloads Excel / Views Selected Candidates
 
-#🧑‍💼 Recruiter Features
+🧑‍💼 Recruiter Features
 Create job roles
 Set interview parameters:
 Duration
@@ -96,13 +96,13 @@ Type
 View candidate analytics
 Download reports
 
-#🧑‍💻 Candidate Experience
+🧑‍💻 Candidate Experience
 Receives interview link
 Joins interview (no login required)
 Interacts with AI interviewer
 Gets evaluated automatically
 
-#⚙️ Tech Stack
+⚙️ Tech Stack
 Frontend: Next.js, React, Tailwind CSS
 Backend: Node.js / API Routes
 Database: Bolt DB / Firebase
@@ -110,16 +110,16 @@ AI Integration: NLP + LLM-based evaluation
 Voice: Speech-to-Text + Text-to-Speech
 Email: Resend
 
-#🔐 Security & Proctoring
+🔐 Security & Proctoring
 Token-based interview access
 Real-time monitoring
 Automatic disqualification on malpractice
 
-#🎬 Demo Mode
+🎬 Demo Mode
 Includes 1-minute interview mode
 Email operates in test mode (sends to owner email)
 
-#📈 Future Improvements
+📈 Future Improvements
 Real-time avatar interviewer
 Advanced AI proctoring (face detection)
 Multi-language interviews
@@ -130,11 +130,11 @@ Live recruiter dashboard analytics
 Contributions are welcome!
 Feel free to fork the repo and submit pull requests.
 
-#📄 License
+📄 License
 
 This project is open-source and available under the MIT License.
 
-#💡 Project Vision
+💡 Project Vision
 
 To build a fully automated AI recruiter assistant that reduces hiring time and improves decision-making accuracy.
 
