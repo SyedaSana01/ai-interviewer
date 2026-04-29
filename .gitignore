@@ -1,4 +1,29 @@
+
+# =========================
+# Dependencies
+# =========================
+node_modules/
+
+# =========================
+# Build outputs
+# =========================
+dist/
+dist-ssr/
+build/
+.output/
+.nitro/
+
+# =========================
+# Environment variables (CRITICAL)
+# =========================
+.env
+.env.*
+*.local
+.dev.vars
+
+# =========================
 # Logs
+# =========================
 logs
 *.log
 npm-debug.log*
@@ -7,26 +32,46 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
+# =========================
+# Cache / temp files
+# =========================
+.cache/
+.temp/
+.tmp/
+
+# =========================
+# Framework-specific
+# =========================
+.vinxi/
 .tanstack/**
-.nitro
-*.local
-
-# Wrangler / Cloudflare
 .wrangler/
-.dev.vars
 
-# Editor directories and files
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Editor / IDE
+# =========================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# =========================
+# Testing
+# =========================
+coverage/
+
+# =========================
+# Misc
+# =========================
+*.pid
+*.seed
+*.pid.lock
